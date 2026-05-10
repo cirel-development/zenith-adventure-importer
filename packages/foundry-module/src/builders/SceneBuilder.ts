@@ -56,18 +56,32 @@ export class SceneBuilder {
     }
 
     const { width, height } = entry.dimensions;
+    const padding = entry.dimensions.padding;
+
+    // Foundry's `padding` adds extra canvas space around the playable area.
+    // The background image sits in the playable area, which starts at
+    // (padding * width, padding * height) on the canvas — NOT at (0, 0).
+    // Our normalized 0..1 coordinates from the contract describe positions
+    // relative to the image, so we add the offset to align walls/lights/etc
+    // with the actual image, not the upper-left of the padded canvas.
+    const offsetX = width * padding;
+    const offsetY = height * padding;
 
     // Convert all normalized coordinates to scene-pixel coordinates.
-    const walls = entry.walls.map((w) => this.buildWall(w, width, height));
-    const lights = entry.lights.map((l) => this.buildLight(l, width, height, entry.grid.size));
-    const sounds = entry.sounds.map((s) => this.buildSound(s, width, height, entry.grid.size));
+    const walls = entry.walls.map((w) => this.buildWall(w, width, height, offsetX, offsetY));
+    const lights = entry.lights.map((l) =>
+      this.buildLight(l, width, height, entry.grid.size, offsetX, offsetY),
+    );
+    const sounds = entry.sounds.map((s) =>
+      this.buildSound(s, width, height, entry.grid.size, offsetX, offsetY),
+    );
 
     // Notes are created with the journal_ref still as a [[REF:]] token.
     // The RefResolver pass replaces these with real journal references, then
     // a separate pinning pass attaches notes to the right journal page.
     // For Pass 1 we just store the raw ref in the note's flags so the
     // resolver can find it.
-    const notes = entry.notes.map((n) => this.buildNote(n, width, height));
+    const notes = entry.notes.map((n) => this.buildNote(n, width, height, offsetX, offsetY));
 
     const sceneData: Record<string, unknown> = {
       name: entry.name,
@@ -93,8 +107,8 @@ export class SceneBuilder {
 
     if (entry.initial_view) {
       sceneData['initial'] = {
-        x: entry.initial_view.x * width,
-        y: entry.initial_view.y * height,
+        x: offsetX + entry.initial_view.x * width,
+        y: offsetY + entry.initial_view.y * height,
         scale: entry.initial_view.scale,
       };
     }
@@ -124,14 +138,20 @@ export class SceneBuilder {
   // Coordinate denormalization
   // ============================================================================
 
-  private buildWall(wall: Wall, sceneWidth: number, sceneHeight: number): unknown {
+  private buildWall(
+    wall: Wall,
+    sceneWidth: number,
+    sceneHeight: number,
+    offsetX: number,
+    offsetY: number,
+  ): unknown {
     const [x1, y1, x2, y2] = wall.c;
     return {
       c: [
-        x1 * sceneWidth,
-        y1 * sceneHeight,
-        x2 * sceneWidth,
-        y2 * sceneHeight,
+        offsetX + x1 * sceneWidth,
+        offsetY + y1 * sceneHeight,
+        offsetX + x2 * sceneWidth,
+        offsetY + y2 * sceneHeight,
       ],
       light: wall.light,
       move: wall.move,
@@ -146,10 +166,12 @@ export class SceneBuilder {
     sceneWidth: number,
     sceneHeight: number,
     gridSize: number,
+    offsetX: number,
+    offsetY: number,
   ): unknown {
     return {
-      x: light.x * sceneWidth,
-      y: light.y * sceneHeight,
+      x: offsetX + light.x * sceneWidth,
+      y: offsetY + light.y * sceneHeight,
       config: {
         // Light radii are in grid units in the contract; Foundry expects pixels.
         // dim/bright fields on the light itself become grid-unit radii Foundry
@@ -177,10 +199,12 @@ export class SceneBuilder {
     sceneWidth: number,
     sceneHeight: number,
     gridSize: number,
+    offsetX: number,
+    offsetY: number,
   ): unknown {
     return {
-      x: sound.x * sceneWidth,
-      y: sound.y * sceneHeight,
+      x: offsetX + sound.x * sceneWidth,
+      y: offsetY + sound.y * sceneHeight,
       radius: sound.radius * gridSize,
       easing: sound.easing,
       volume: sound.volume,
@@ -194,10 +218,16 @@ export class SceneBuilder {
     };
   }
 
-  private buildNote(note: SceneEntry['notes'][number], sceneWidth: number, sceneHeight: number): unknown {
+  private buildNote(
+    note: SceneEntry['notes'][number],
+    sceneWidth: number,
+    sceneHeight: number,
+    offsetX: number,
+    offsetY: number,
+  ): unknown {
     return {
-      x: note.x * sceneWidth,
-      y: note.y * sceneHeight,
+      x: offsetX + note.x * sceneWidth,
+      y: offsetY + note.y * sceneHeight,
       icon: note.icon,
       iconSize: note.icon_size,
       ...(note.label ? { text: note.label } : {}),

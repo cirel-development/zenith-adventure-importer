@@ -119,7 +119,58 @@ export class RefResolver {
       }
     }
 
-    log.info(`resolved refs: ${journalsUpdated} pages updated, ${notesUpdated} notes pinned`);
+    // ----- Item descriptions pass -----
+    // PF2e items have descriptions at system.description.value. Custom items
+    // may include [[REF:]] tokens (e.g. "see [[REF:journal:npc#captain-marrow]]").
+    let itemsUpdated = 0;
+    for (const itemEntry of bundle.items.entities) {
+      const record = registry.lookup('item', itemEntry.slug);
+      if (!record) continue;
+      const foundryItem = game.items.get(record.foundryId);
+      if (!foundryItem) continue;
+
+      const description = (foundryItem as any).system?.description?.value;
+      if (typeof description !== 'string' || !description.includes('[[REF:')) {
+        continue;
+      }
+
+      const resolved = this.resolveContent(description, registry);
+      if (resolved === description) continue;
+
+      await (foundryItem as any).update({
+        'system.description.value': resolved,
+      });
+      itemsUpdated++;
+    }
+
+    // ----- Actor tactics + linked-journal pass -----
+    // Custom NPC tactics (system.details.publicNotes for PF2e) and the
+    // linked_journal field can both contain refs.
+    let actorsUpdated = 0;
+    for (const actorEntry of bundle.actors.entities) {
+      const record = registry.lookup('actor', actorEntry.slug);
+      if (!record) continue;
+      const foundryActor = game.actors.get(record.foundryId);
+      if (!foundryActor) continue;
+
+      const updates: Record<string, unknown> = {};
+      const publicNotes = (foundryActor as any).system?.details?.publicNotes;
+      if (typeof publicNotes === 'string' && publicNotes.includes('[[REF:')) {
+        const resolved = this.resolveContent(publicNotes, registry);
+        if (resolved !== publicNotes) {
+          updates['system.details.publicNotes'] = resolved;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await (foundryActor as any).update(updates);
+        actorsUpdated++;
+      }
+    }
+
+    log.info(
+      `resolved refs: ${journalsUpdated} pages updated, ${notesUpdated} notes pinned, ${itemsUpdated} items updated, ${actorsUpdated} actors updated`,
+    );
   }
 
   // ============================================================================

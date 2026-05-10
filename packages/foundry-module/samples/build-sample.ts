@@ -272,7 +272,7 @@ const bundle: Bundle = {
               type: 'melee',
               attack_bonus: 5,
               damage_formula: '1d6+1 piercing',
-              traits: ['improvised'],
+              traits: [],
             },
           ],
           actions: [

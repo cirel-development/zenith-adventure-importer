@@ -117,7 +117,11 @@ export class ActorBuilder {
       ...(tokenSrc ? { texture: { src: tokenSrc } } : {}),
     };
 
-    const created = await Actor.create(data);
+    const created = await this.tryCreateActor(data, entry.slug);
+    if (!created) {
+      log.warn(`actor "${entry.slug}" could not be created, skipping`);
+      return;
+    }
     registry.record({
       slug: entry.slug,
       type: 'actor',
@@ -125,6 +129,41 @@ export class ActorBuilder {
       collection: 'Actor',
     });
     log.debug('actor created', entry.slug, '→', created.id);
+  }
+
+  /**
+   * Try to create the actor. If PF2e rejects it (usually because of a trait
+   * or schema mismatch in the embedded items), retry once without the items —
+   * the actor still gets created with all its core stats; the GM just has to
+   * add the strikes/abilities by hand. Better than no actor at all.
+   */
+  private async tryCreateActor(
+    data: Record<string, unknown>,
+    slug: string,
+  ): Promise<ActorDoc | null> {
+    try {
+      return await Actor.create(data);
+    } catch (err) {
+      const msg = (err as Error)?.message ?? String(err);
+      log.warn(
+        `actor "${slug}" rejected by validation, retrying without embedded items:`,
+        msg,
+      );
+    }
+
+    // Retry path — strip the items array. Most validation errors come from
+    // trait/schema mismatches on the embedded melee/action items.
+    try {
+      const stripped = { ...data, items: [] };
+      const created = await Actor.create(stripped);
+      log.warn(
+        `actor "${slug}" created without strikes/abilities — GM must add them manually`,
+      );
+      return created;
+    } catch (err) {
+      log.error(`actor "${slug}" failed even without items:`, err);
+      return null;
+    }
   }
 
   /**
