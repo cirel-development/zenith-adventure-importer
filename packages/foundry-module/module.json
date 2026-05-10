@@ -1,0 +1,28 @@
+{
+  "id": "zenith-adventure-importer",
+  "title": "Zenith Adventure Importer",
+  "description": "Import AI-processed adventure bundles into Foundry. Pairs with the Zenith Adventure web service to convert PF2e and D&D 5e PDFs into ready-to-run adventures with scenes, journals, walls, lights, and content.",
+  "version": "0.1.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13",
+    "maximum": "13"
+  },
+  "authors": [
+    {
+      "name": "Zenith Sector"
+    }
+  ],
+  "esmodules": ["module.js"],
+  "styles": ["zenith-adventure-importer.css"],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "url": "https://zenithsector.com",
+  "manifest": "https://zenithsector.com/modules/zenith-adventure-importer/module.json",
+  "download": "https://zenithsector.com/modules/zenith-adventure-importer/zenith-adventure-importer.zip"
+}

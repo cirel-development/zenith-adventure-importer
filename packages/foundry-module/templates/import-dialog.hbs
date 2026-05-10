@@ -1,0 +1,55 @@
+<div class="zenith-import-dialog">
+  <p class="zenith-intro">
+    Import an adventure bundle exported from Zenith. The bundle includes scenes with walls and lights, journals, NPCs, and treasure — all wired up and ready to run.
+  </p>
+
+  <div class="zenith-source-picker">
+    <label class="zenith-source-option">
+      <input type="radio" name="source" value="bundle-id" checked>
+      <span>By bundle ID</span>
+    </label>
+    <label class="zenith-source-option">
+      <input type="radio" name="source" value="url">
+      <span>From URL</span>
+    </label>
+    <label class="zenith-source-option">
+      <input type="radio" name="source" value="file">
+      <span>Upload file</span>
+    </label>
+  </div>
+
+  <section data-source-section="bundle-id">
+    <label for="zenith-bundle-id">Bundle ID</label>
+    <input type="text" id="zenith-bundle-id" placeholder="bnd_a7f3e9c2">
+    <p class="zenith-hint">
+      Find this in your Zenith account after the adventure finishes processing.
+    </p>
+  </section>
+
+  <section data-source-section="url" style="display:none">
+    <label for="zenith-url">Download URL</label>
+    <input type="url" id="zenith-url" placeholder="https://...">
+    <p class="zenith-hint">
+      A signed download link. Useful if a friend shared theirs with you.
+    </p>
+  </section>
+
+  <section data-source-section="file" style="display:none">
+    <label for="zenith-file-input">Bundle file</label>
+    <div class="zenith-drop-zone" id="zenith-drop-zone">
+      <input type="file" id="zenith-file-input" accept=".zip" hidden>
+      <label for="zenith-file-input" class="zenith-drop-label">
+        <i class="fas fa-file-archive"></i>
+        <span id="zenith-file-label">Click or drop a .zip file here</span>
+      </label>
+    </div>
+  </section>
+
+  <div class="zenith-actions">
+    <button type="button" id="zenith-cancel" class="zenith-button-secondary">Cancel</button>
+    <button type="button" id="zenith-submit" class="zenith-button-primary">
+      <i class="fas fa-download"></i>
+      Import
+    </button>
+  </div>
+</div>

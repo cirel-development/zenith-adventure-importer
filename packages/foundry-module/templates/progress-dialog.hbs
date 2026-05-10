@@ -1,0 +1,62 @@
+<div class="zenith-progress-dialog">
+
+  {{#if (eq state "running")}}
+    <div class="zenith-progress-running">
+      <div class="zenith-phase-display">
+        <i class="fas fa-cog fa-spin"></i>
+        <span class="zenith-phase-name">{{phaseDisplay}}</span>
+      </div>
+      <p class="zenith-message">{{progress.message}}</p>
+      {{#if percent}}
+        <div class="zenith-progress-bar">
+          <div class="zenith-progress-fill" style="width:{{percent}}%"></div>
+        </div>
+        <p class="zenith-progress-count">{{progress.current}} of {{progress.total}}</p>
+      {{/if}}
+    </div>
+  {{/if}}
+
+  {{#if (eq state "complete")}}
+    <div class="zenith-progress-complete">
+      <div class="zenith-icon-success">
+        <i class="fas fa-check-circle"></i>
+      </div>
+      <h3>{{summary.adventureTitle}}</h3>
+      <p class="zenith-summary-line">
+        Created {{summary.entitiesCreated}} entities and uploaded {{summary.assetsUploaded}} assets.
+      </p>
+
+      {{#if summary.warnings.length}}
+        <details class="zenith-warnings">
+          <summary>{{summary.warnings.length}} warnings during processing</summary>
+          <ul>
+            {{#each summary.warnings}}
+              <li>{{this}}</li>
+            {{/each}}
+          </ul>
+        </details>
+      {{/if}}
+
+      <div class="zenith-actions">
+        <button type="button" id="zenith-close" class="zenith-button-primary">Close</button>
+      </div>
+    </div>
+  {{/if}}
+
+  {{#if (eq state "error")}}
+    <div class="zenith-progress-error">
+      <div class="zenith-icon-error">
+        <i class="fas fa-exclamation-triangle"></i>
+      </div>
+      <h3>Import failed</h3>
+      <pre class="zenith-error-message">{{errorMessage}}</pre>
+      <p class="zenith-hint">
+        Any partial state has been rolled back. Check the browser console (F12) for full error details.
+      </p>
+      <div class="zenith-actions">
+        <button type="button" id="zenith-close" class="zenith-button-primary">Close</button>
+      </div>
+    </div>
+  {{/if}}
+
+</div>

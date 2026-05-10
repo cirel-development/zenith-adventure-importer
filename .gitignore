@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+*.tsbuildinfo
+
+# Generated bundle samples (regenerate with pnpm sample)
+packages/foundry-module/samples/*.zip
+
+# Editor / OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Environment
+.env
+.env.*.local
+.env.local
+
+# Foundry deployment artifacts (in case anyone copies the install dir into the repo by accident)
+foundrydata/
+
+# Lock files we don't want
+package-lock.json
+yarn.lock

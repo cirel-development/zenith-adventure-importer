@@ -1,0 +1,31 @@
+{
+  "ZENITH_IMPORTER": {
+    "Title": "Zenith Adventure Importer",
+    "Menu": {
+      "Import": "Import Adventure...",
+      "ManageImports": "Manage Imports..."
+    },
+    "Settings": {
+      "ServiceUrl": {
+        "Name": "Service URL",
+        "Hint": "Base URL of the Zenith Adventure web service."
+      },
+      "AuthToken": {
+        "Name": "Auth Token",
+        "Hint": "Personal access token from your Zenith account."
+      },
+      "AutoLinkPlaylists": {
+        "Name": "Auto-link playlists to scenes",
+        "Hint": "When enabled, scenes with a playlist hint set their playlistSound automatically."
+      },
+      "VerboseLogging": {
+        "Name": "Verbose logging",
+        "Hint": "Log every pipeline step to the browser console."
+      }
+    },
+    "Errors": {
+      "GMOnly": "Only the GM can import adventure bundles.",
+      "AlreadyImported": "This bundle has already been imported. Undo it first if you want to re-import."
+    }
+  }
+}

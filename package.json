@@ -1,0 +1,20 @@
+{
+  "name": "zenith-adventure-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zenith Adventure Importer — monorepo containing the wire-format contract, Foundry companion module, and (eventually) the web service worker",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "build:contract": "pnpm --filter @ai-adventure/contract build",
+    "build:module": "pnpm --filter zenith-adventure-importer build",
+    "sample": "pnpm --filter zenith-adventure-importer sample",
+    "clean": "pnpm -r exec rm -rf dist node_modules"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

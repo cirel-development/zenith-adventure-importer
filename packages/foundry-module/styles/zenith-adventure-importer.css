@@ -1,0 +1,222 @@
+/* ============================================================================
+   Zenith Adventure Importer — module styles
+   ============================================================================ */
+
+.zenith-importer .window-content {
+  padding: 16px;
+}
+
+.zenith-import-dialog,
+.zenith-progress-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.zenith-intro {
+  margin: 0 0 8px;
+  color: var(--color-text-dark-secondary, #4b4a44);
+  line-height: 1.4;
+}
+
+.zenith-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--color-text-dark-secondary, #6f6f6f);
+}
+
+/* Source picker - horizontal radio buttons */
+.zenith-source-picker {
+  display: flex;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border-light-tertiary, #d4d2c7);
+}
+
+.zenith-source-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.zenith-source-option input[type="radio"] {
+  margin: 0;
+}
+
+/* Field labels and inputs */
+.zenith-import-dialog label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.zenith-import-dialog input[type="text"],
+.zenith-import-dialog input[type="url"] {
+  width: 100%;
+  padding: 6px 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+}
+
+/* Drop zone */
+.zenith-drop-zone {
+  position: relative;
+  border: 2px dashed var(--color-border-light-tertiary, #c0bdb1);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  transition: border-color 0.15s, background-color 0.15s;
+  cursor: pointer;
+}
+
+.zenith-drop-zone.dragover {
+  border-color: var(--color-text-hyperlink, #5a8caf);
+  background: rgba(90, 140, 175, 0.05);
+}
+
+.zenith-drop-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.zenith-drop-label i {
+  font-size: 24px;
+  color: var(--color-text-dark-secondary, #6f6f6f);
+}
+
+/* Action buttons row */
+.zenith-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-light-tertiary, #d4d2c7);
+}
+
+.zenith-button-primary,
+.zenith-button-secondary {
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.zenith-button-primary {
+  font-weight: 500;
+}
+
+/* Progress dialog */
+.zenith-progress-running,
+.zenith-progress-complete,
+.zenith-progress-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 8px;
+}
+
+.zenith-progress-complete h3,
+.zenith-progress-error h3 {
+  margin: 0;
+  text-align: center;
+}
+
+.zenith-phase-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.zenith-phase-display i {
+  color: var(--color-text-hyperlink, #5a8caf);
+}
+
+.zenith-message {
+  margin: 0;
+  text-align: center;
+  color: var(--color-text-dark-secondary, #4b4a44);
+}
+
+.zenith-progress-bar {
+  width: 100%;
+  height: 12px;
+  background: var(--color-border-light-tertiary, #d4d2c7);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.zenith-progress-fill {
+  height: 100%;
+  background: var(--color-text-hyperlink, #5a8caf);
+  transition: width 0.2s ease-out;
+}
+
+.zenith-progress-count {
+  margin: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-dark-secondary, #6f6f6f);
+}
+
+.zenith-icon-success,
+.zenith-icon-error {
+  font-size: 36px;
+}
+
+.zenith-icon-success i {
+  color: #4d8c2f;
+}
+
+.zenith-icon-error i {
+  color: #b94545;
+}
+
+.zenith-summary-line {
+  margin: 0;
+  text-align: center;
+}
+
+.zenith-warnings {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.zenith-warnings summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.zenith-warnings ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.zenith-error-message {
+  width: 100%;
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 10px;
+  background: rgba(185, 69, 69, 0.08);
+  border: 1px solid rgba(185, 69, 69, 0.2);
+  border-radius: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
