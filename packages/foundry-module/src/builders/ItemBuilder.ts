@@ -97,8 +97,8 @@ export class ItemBuilder {
   ): Promise<Record<string, unknown> | null> {
     switch (entry.data.kind) {
       case 'compendium-ref': {
-        const source = await this.compendium.resolveSource(entry.data.uuid);
-        if (!source) {
+        const result = await this.compendium.resolveSource(entry.data.uuid, entry.name);
+        if (!result) {
           log.warn(`item "${entry.slug}": compendium UUID ${entry.data.uuid} not found, placeholder`);
           return {
             type: 'equipment',
@@ -110,17 +110,26 @@ export class ItemBuilder {
             },
           };
         }
-        delete (source as any)._id;
-        delete (source as any).folder;
-        delete (source as any).sort;
+        const source = result.source;
         if (entry.data.name_override) {
           source['name'] = entry.data.name_override;
+        }
+        if (result.driftWarning) {
+          source['flags'] = {
+            ...((source['flags'] as Record<string, unknown>) ?? {}),
+            'zenith-adventure-importer': {
+              ...((source['flags'] as any)?.['zenith-adventure-importer'] ?? {}),
+              driftWarning: true,
+              originalUuid: entry.data.uuid,
+              resolvedUuid: result.resolvedUuid,
+            },
+          };
         }
         return source;
       }
 
       case 'compendium-ref-with-runes': {
-        const result = await this.runes.apply(entry.data.base_uuid, entry.data.runes);
+        const result = await this.runes.apply(entry.data.base_uuid, entry.data.runes, entry.name);
         if (!result) {
           log.warn(`item "${entry.slug}": rune application failed, placeholder`);
           return {

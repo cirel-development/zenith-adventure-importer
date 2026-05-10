@@ -32,16 +32,27 @@ export class RuneApplicator {
   async apply(
     baseUuid: string,
     runes: PF2eRune[],
+    fallbackName?: string,
   ): Promise<Record<string, unknown> | null> {
-    const base = await this.compendium.resolveSource(baseUuid);
-    if (!base) {
+    const result = await this.compendium.resolveSource(baseUuid, fallbackName);
+    if (!result) {
       log.warn(`base item not found: ${baseUuid}`);
       return null;
     }
 
-    delete (base as any)._id;
-    delete (base as any).folder;
-    delete (base as any).sort;
+    const base = result.source;
+
+    if (result.driftWarning) {
+      base['flags'] = {
+        ...((base['flags'] as Record<string, unknown>) ?? {}),
+        'zenith-adventure-importer': {
+          ...((base['flags'] as any)?.['zenith-adventure-importer'] ?? {}),
+          driftWarning: true,
+          originalUuid: baseUuid,
+          resolvedUuid: result.resolvedUuid,
+        },
+      };
+    }
 
     const system = ((base['system'] as Record<string, unknown>) ??= {});
     const runesField = ((system['runes'] as Record<string, unknown>) ??= {});

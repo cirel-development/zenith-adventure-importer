@@ -192,8 +192,9 @@ export class ActorBuilder {
     entry: ActorEntry,
     statBlock: Extract<StatBlock, { kind: 'compendium-ref' }>,
   ): Promise<Record<string, unknown> | null> {
-    const source = await this.compendium.resolveSource(statBlock.uuid);
-    if (!source) {
+    // Pass the entry's name as fallback for when the UUID drifts across versions
+    const result = await this.compendium.resolveSource(statBlock.uuid, entry.name);
+    if (!result) {
       // Compendium miss — create a placeholder so the GM at least sees
       // the entity is supposed to exist, with a clear flag.
       log.warn(
@@ -210,13 +211,25 @@ export class ActorBuilder {
       };
     }
 
-    // Strip the source's _id so Foundry assigns a new one
-    delete (source as any)._id;
-    delete (source as any).folder;
-    delete (source as any).sort;
+    const source = result.source;
+    // Note: _id/folder/sort were already stripped by CompendiumLookup.toSource
 
     if (statBlock.name_override) {
       source['name'] = statBlock.name_override;
+    }
+
+    // If we matched by name fallback, flag the actor so the GM knows
+    // to check that the matched entity is what they expected.
+    if (result.driftWarning) {
+      source['flags'] = {
+        ...((source['flags'] as Record<string, unknown>) ?? {}),
+        'zenith-adventure-importer': {
+          ...((source['flags'] as any)?.['zenith-adventure-importer'] ?? {}),
+          driftWarning: true,
+          originalUuid: statBlock.uuid,
+          resolvedUuid: result.resolvedUuid,
+        },
+      };
     }
     return source;
   }
@@ -401,9 +414,11 @@ export class ActorBuilder {
     for (const ref of statBlock.contents) {
       // Compendium-resolved items go directly into the container as embedded items
       if (ref.uuid) {
-        const source = await this.compendium.resolveSource(ref.uuid);
-        if (source) {
-          delete (source as any)._id;
+        // No fallback name available for loot contents (the contract doesn't
+        // carry a name on each ref). UUID must hit; otherwise log and skip.
+        const result = await this.compendium.resolveSource(ref.uuid);
+        if (result) {
+          const source = result.source;
           (source as any).system = {
             ...(source as any).system,
             quantity: ref.quantity,

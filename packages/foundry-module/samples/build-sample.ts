@@ -25,8 +25,204 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SAMPLE_DIR = join(HERE, 'the-haunted-mill');
 
 // ============================================================================
+// Compendium UUIDs — replace with values from your installed PF2e
+// ============================================================================
+// To get these, paste this into Foundry's F12 console:
+//
+//   const monster = await game.packs.get('pf2e.pathfinder-monster-core').getDocuments();
+//   console.log('Goblin Warrior:', monster.find(m => m.name === 'Goblin Warrior')?.uuid);
+//   const equip = await game.packs.get('pf2e.equipment-srd').getDocuments();
+//   console.log('Dagger:', equip.find(i => i.name === 'Dagger')?.uuid);
+//   console.log('Striking:', equip.find(i => i.name === 'Striking')?.uuid);
+//
+// If a constant is left as `null`, the corresponding test entity is skipped.
+const COMPENDIUM_UUIDS = {
+  goblinWarrior: 'Compendium.pf2e.pathfinder-monster-core.Actor.fLLKuOXwPq1Iq0U4',
+  dagger: 'Compendium.pf2e.equipment-srd.Item.rQWaJhI5Bko5x14Z',
+  strikingRune: 'Compendium.pf2e.equipment-srd.Item.DxCuJKynlnMQZHgp',
+};
+
+// ============================================================================
 // Build the bundle in memory
 // ============================================================================
+
+// Build actors: always include Old Tom, optionally include compendium-ref entries
+function buildActorEntities() {
+  const entities: Bundle['actors']['entities'] = [
+    {
+      slug: 'old-tom',
+      name: 'Old Tom',
+      category: 'npc',
+      folder: 'haunted-mill-actors',
+      portrait: 'images/portraits/old-tom.png',
+      token_image: 'images/portraits/old-tom.png',
+      token_config: {
+        disposition: 'neutral',
+        scale: 1,
+        unlinked: false,
+      },
+      stat_block: {
+        kind: 'custom',
+        level: 0,
+        size: 'medium',
+        rarity: 'common',
+        alignment: 'NG',
+        traits: ['humanoid', 'human'],
+        languages: ['Common'],
+        hp: 8,
+        ac: 13,
+        saves: { fortitude: 4, reflex: 2, will: 6 },
+        abilities: { str: 1, dex: 0, con: 2, int: 1, wis: 3, cha: 0 },
+        perception: 4,
+        senses: [],
+        skills: [
+          { name: 'Crafting', bonus: 6 },
+          { name: 'Survival', bonus: 5 },
+        ],
+        speeds: { land: 25 },
+        immunities: [],
+        weaknesses: [],
+        resistances: [],
+        strikes: [
+          {
+            name: 'Iron poker',
+            type: 'melee',
+            attack_bonus: 5,
+            damage_formula: '1d6+1 piercing',
+            traits: [],
+          },
+        ],
+        actions: [
+          {
+            name: 'Recall the ritual',
+            cost: '1',
+            traits: ['concentrate', 'mental'],
+            description_html:
+              "<p>Tom recalls the cultists' chant in detail, possibly identifying their faction.</p>",
+          },
+        ],
+        spellcasting: [],
+        inventory: [],
+        tactics_html:
+          '<p>Tom does not fight. He hides behind cover and shouts warnings to the PCs.</p>',
+      },
+      linked_journal: '[[REF:journal:npcs#old-tom]]',
+      ai_metadata: {
+        confidence: 0.9,
+        source_page: 4,
+        extracted_at: new Date().toISOString(),
+        prompt_version: 'sample-handwritten',
+        review_required: false,
+        review_reasons: [],
+      },
+    },
+  ];
+
+  // Test 1: compendium-ref with a working UUID — exercises the happy path
+  if (COMPENDIUM_UUIDS.goblinWarrior) {
+    entities.push({
+      slug: 'sample-goblin',
+      name: 'Goblin Warrior',
+      category: 'creature',
+      folder: 'haunted-mill-actors',
+      stat_block: {
+        kind: 'compendium-ref',
+        uuid: COMPENDIUM_UUIDS.goblinWarrior,
+      },
+    });
+  }
+
+  // Test 2: compendium-ref with a deliberately broken UUID + correct name —
+  // exercises the name-fallback path. The pack name in the URL must still be
+  // valid; only the document ID is broken.
+  if (COMPENDIUM_UUIDS.goblinWarrior) {
+    const broken = COMPENDIUM_UUIDS.goblinWarrior.replace(
+      /\.[\w-]+$/,
+      '.deliberatelyBrokenId',
+    );
+    entities.push({
+      slug: 'drift-test-goblin',
+      name: 'Goblin Warrior',
+      category: 'creature',
+      folder: 'haunted-mill-actors',
+      stat_block: {
+        kind: 'compendium-ref',
+        uuid: broken,
+      },
+    });
+  }
+
+  return entities;
+}
+
+// Build items: always include Cult Amulet, optionally include compendium-ref entries
+function buildItemEntities() {
+  const entities: Bundle['items']['entities'] = [
+    {
+      slug: 'cult-amulet',
+      name: 'Cult Amulet',
+      category: 'magic_item',
+      folder: 'haunted-mill-items',
+      data: {
+        kind: 'custom',
+        item_type: 'equipment',
+        level: 2,
+        rarity: 'uncommon',
+        traits: ['evil', 'invested', 'magical'],
+        bulk: 'L',
+        price_cp: 4000, // 4 gp
+        description_html:
+          '<p>A black iron pendant inscribed with the symbol of the cult that menaced [[REF:journal:npcs#old-tom]]. Wearing it suppresses fear effects but may be detected by paladins.</p>',
+        effects: [],
+        requires_investiture: true,
+      },
+      ai_metadata: {
+        confidence: 0.85,
+        source_page: 4,
+        review_required: false,
+        review_reasons: [],
+      },
+    },
+  ];
+
+  // Test 3: plain compendium-ref item — should resolve directly
+  if (COMPENDIUM_UUIDS.dagger) {
+    entities.push({
+      slug: 'sample-dagger',
+      name: 'Dagger',
+      category: 'weapon',
+      folder: 'haunted-mill-items',
+      data: {
+        kind: 'compendium-ref',
+        uuid: COMPENDIUM_UUIDS.dagger,
+      },
+    });
+  }
+
+  // Test 4: compendium-ref-with-runes — base dagger + striking rune.
+  // Exercises the rune application path that's never been tested.
+  if (COMPENDIUM_UUIDS.dagger && COMPENDIUM_UUIDS.strikingRune) {
+    entities.push({
+      slug: 'striking-dagger',
+      name: 'Striking Dagger',
+      category: 'weapon',
+      folder: 'haunted-mill-items',
+      data: {
+        kind: 'compendium-ref-with-runes',
+        base_uuid: COMPENDIUM_UUIDS.dagger,
+        runes: [
+          {
+            type: 'striking',
+            uuid: COMPENDIUM_UUIDS.strikingRune,
+            rank: 1,
+          },
+        ],
+      },
+    });
+  }
+
+  return entities;
+}
 
 const bundle: Bundle = {
   manifest: {
@@ -229,108 +425,14 @@ const bundle: Bundle = {
     ],
   },
 
-  // ----- Actors: Old Tom as a custom NPC -----
+  // ----- Actors: Old Tom (custom) + optional compendium-ref test entities -----
   actors: {
-    entities: [
-      {
-        slug: 'old-tom',
-        name: 'Old Tom',
-        category: 'npc',
-        folder: 'haunted-mill-actors',
-        portrait: 'images/portraits/old-tom.png',
-        token_image: 'images/portraits/old-tom.png',
-        token_config: {
-          disposition: 'neutral',
-          scale: 1,
-          unlinked: false,
-        },
-        stat_block: {
-          kind: 'custom',
-          level: 0,
-          size: 'medium',
-          rarity: 'common',
-          alignment: 'NG',
-          traits: ['humanoid', 'human'],
-          languages: ['Common'],
-          hp: 8,
-          ac: 13,
-          saves: { fortitude: 4, reflex: 2, will: 6 },
-          abilities: { str: 1, dex: 0, con: 2, int: 1, wis: 3, cha: 0 },
-          perception: 4,
-          senses: [],
-          skills: [
-            { name: 'Crafting', bonus: 6 },
-            { name: 'Survival', bonus: 5 },
-          ],
-          speeds: { land: 25 },
-          immunities: [],
-          weaknesses: [],
-          resistances: [],
-          strikes: [
-            {
-              name: 'Iron poker',
-              type: 'melee',
-              attack_bonus: 5,
-              damage_formula: '1d6+1 piercing',
-              traits: [],
-            },
-          ],
-          actions: [
-            {
-              name: 'Recall the ritual',
-              cost: '1',
-              traits: ['concentrate', 'mental'],
-              description_html:
-                '<p>Tom recalls the cultists\' chant in detail, possibly identifying their faction.</p>',
-            },
-          ],
-          spellcasting: [],
-          inventory: [],
-          tactics_html:
-            '<p>Tom does not fight. He hides behind cover and shouts warnings to the PCs.</p>',
-        },
-        linked_journal: '[[REF:journal:npcs#old-tom]]',
-        ai_metadata: {
-          confidence: 0.9,
-          source_page: 4,
-          extracted_at: new Date().toISOString(),
-          prompt_version: 'sample-handwritten',
-          review_required: false,
-          review_reasons: [],
-        },
-      },
-    ],
+    entities: buildActorEntities(),
   },
 
   // ----- Items: a single custom magic item -----
   items: {
-    entities: [
-      {
-        slug: 'cult-amulet',
-        name: 'Cult Amulet',
-        category: 'magic_item',
-        folder: 'haunted-mill-items',
-        data: {
-          kind: 'custom',
-          item_type: 'equipment',
-          level: 2,
-          rarity: 'uncommon',
-          traits: ['evil', 'invested', 'magical'],
-          bulk: 'L',
-          price_cp: 4000, // 4 gp
-          description_html:
-            '<p>A black iron pendant inscribed with the symbol of the cult that menaced [[REF:journal:npcs#old-tom]]. Wearing it suppresses fear effects but may be detected by paladins.</p>',
-          effects: [],
-          requires_investiture: true,
-        },
-        ai_metadata: {
-          confidence: 0.85,
-          source_page: 4,
-          review_required: false,
-          review_reasons: [],
-        },
-      },
-    ],
+    entities: buildItemEntities(),
   },
 
   // ----- Two scenes: the mill (above) and the cellar (below) -----
@@ -521,6 +623,14 @@ const bundle: Bundle = {
 // ============================================================================
 // Validate against the contract
 // ============================================================================
+
+// Report which compendium-ref tests are active
+console.log('Compendium-ref test coverage:');
+console.log(`  Goblin Warrior:   ${COMPENDIUM_UUIDS.goblinWarrior ? 'enabled' : 'skipped (no UUID configured)'}`);
+console.log(`  Drift fallback:   ${COMPENDIUM_UUIDS.goblinWarrior ? 'enabled' : 'skipped'}`);
+console.log(`  Plain dagger:     ${COMPENDIUM_UUIDS.dagger ? 'enabled' : 'skipped (no UUID configured)'}`);
+console.log(`  Runed dagger:     ${COMPENDIUM_UUIDS.dagger && COMPENDIUM_UUIDS.strikingRune ? 'enabled' : 'skipped'}`);
+console.log('');
 
 console.log('Validating bundle against contract...');
 const result = validateBundle(bundle);
