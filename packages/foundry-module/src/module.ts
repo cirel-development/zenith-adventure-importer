@@ -33,29 +33,58 @@ Hooks.once('ready', () => {
 // Sidebar buttons — add an "Import" button to relevant directory headers
 // ============================================================================
 
-// Foundry v13 hook: renderSidebarTab fires once per directory tab. We add a
-// button to the Scenes, Journal, and Actor directories so the GM can launch
-// the importer from any of those contexts.
-Hooks.on('renderSidebarTab', ((app: any, html: HTMLElement | JQuery) => {
+// ============================================================================
+// Scene controls toolbar — primary entry point
+// ============================================================================
+// Add a button to Foundry's left-side scene controls toolbar. This is the
+// canonical place for module entry points in v13: always visible, always
+// accessible, no dependence on which sidebar tab is active.
+//
+// In v13, getSceneControlButtons receives a keyed object (not an array as in
+// v12). We add a tool to the "tokens" control set since it's the default-
+// selected one and almost always visible.
+Hooks.on('getSceneControlButtons', ((controls: Record<string, any>) => {
   if (!game.user.isGM) return;
 
-  // The directories we want to surface the importer in
-  const targetTabs = ['scenes', 'journal', 'actors', 'items'];
-  const tabName: string = app.tabName ?? app.constructor?.name?.toLowerCase();
-  if (!targetTabs.some((t) => tabName?.toLowerCase().includes(t))) return;
+  // Try a few known control set names — v13 settled on "tokens" but defensive
+  // coding doesn't hurt
+  const targetSet =
+    controls['tokens'] ?? controls['token'] ?? Object.values(controls)[0];
+  if (!targetSet) return;
 
-  // Find the header action area. v13 has different DOM than v12 — try a few.
-  const root = html instanceof HTMLElement ? html : (html as JQuery)[0];
+  // v13 tools are also a keyed object on each control set
+  const tools = targetSet.tools ?? (targetSet.tools = {});
+
+  tools['zenith-importer'] = {
+    name: 'zenith-importer',
+    title: 'Import Zenith Adventure',
+    icon: 'fas fa-book-open',
+    button: true,
+    onChange: () => openImportDialog(),
+    onClick: () => openImportDialog(), // older v13 builds use onClick
+  };
+}) as (...args: unknown[]) => void);
+
+// ============================================================================
+// Sidebar tab buttons — secondary entry point
+// ============================================================================
+// In v13 the sidebar tab hook is `renderAbstractSidebarTab` (or just per-tab
+// hooks like `renderSceneDirectory`). We try each known approach.
+
+function injectSidebarButton(root: HTMLElement | null | undefined): void {
   if (!root) return;
+  if (!game.user.isGM) return;
+  if (root.querySelector('.zenith-importer-button')) return;
+
+  // v13 directory headers — try several selector variants since the DOM has
+  // shifted across point releases
   const header =
-    root.querySelector('.directory-header .action-buttons') ??
     root.querySelector('.directory-header .header-actions') ??
+    root.querySelector('.directory-header .action-buttons') ??
+    root.querySelector('header.directory-header') ??
     root.querySelector('.directory-header');
 
   if (!header) return;
-
-  // Avoid double-adding if the hook fires multiple times
-  if (root.querySelector('.zenith-importer-button')) return;
 
   const button = document.createElement('button');
   button.className = 'zenith-importer-button';
@@ -66,9 +95,21 @@ Hooks.on('renderSidebarTab', ((app: any, html: HTMLElement | JQuery) => {
     e.preventDefault();
     openImportDialog();
   });
-
   header.appendChild(button);
-}) as (...args: unknown[]) => void);
+}
+
+// Per-directory hooks — these fire reliably in v13
+for (const tabHook of [
+  'renderSceneDirectory',
+  'renderJournalDirectory',
+  'renderActorDirectory',
+  'renderItemDirectory',
+]) {
+  Hooks.on(tabHook, ((_app: unknown, html: HTMLElement | JQuery) => {
+    const root = html instanceof HTMLElement ? html : (html as JQuery)[0];
+    injectSidebarButton(root);
+  }) as (...args: unknown[]) => void);
+}
 
 // ============================================================================
 // Public API

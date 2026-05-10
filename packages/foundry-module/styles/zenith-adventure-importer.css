@@ -220,3 +220,22 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ============================================================================
+   Sidebar button — appears in directory headers
+   ============================================================================ */
+
+.zenith-importer-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  margin-left: auto;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.zenith-importer-button i {
+  font-size: 11px;
+}
