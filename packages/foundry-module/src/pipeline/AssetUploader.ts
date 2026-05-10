@@ -15,6 +15,16 @@ export interface ProgressCallback {
   (current: number, total: number, currentItem: string): void;
 }
 
+/**
+ * Get FilePicker from the v13 namespace, falling back to the deprecated global
+ * if running on an older build. The v13 namespace is `foundry.applications.apps.FilePicker.implementation`.
+ */
+function getFilePicker(): typeof FilePicker {
+  const namespaced = (foundry as any)?.applications?.apps?.FilePicker?.implementation;
+  if (namespaced) return namespaced;
+  return FilePicker;
+}
+
 export class AssetUploader {
   /**
    * Upload every asset in the bundle. Path prefix is per-adventure so cleanup
@@ -29,14 +39,15 @@ export class AssetUploader {
     const adventureSlug = loaded.bundle.manifest.adventure.slug;
     const baseTarget = `${ASSET_BASE_PATH}/${adventureSlug}`;
 
-    // Make sure the base directory exists. FilePicker.upload creates the
-    // immediate parent only, not nested ancestors, so we walk subdirectories
-    // and create each one.
-    await this.ensureDirectory(ASSET_BASE_PATH);
-    await this.ensureDirectory(baseTarget);
+    // Walk the full base path creating each segment. FilePicker.createDirectory
+    // does NOT create parent directories — if `uploads/` doesn't exist, you can't
+    // create `uploads/zenith-imports/`. So we create each segment in order.
+    await this.ensurePath(baseTarget);
 
     const assetEntries = Array.from(loaded.assets.entries());
     log.info(`uploading ${assetEntries.length} assets to ${baseTarget}/`);
+
+    const FP = getFilePicker();
 
     let i = 0;
     for (const [bundlePath, data] of assetEntries) {
@@ -53,11 +64,11 @@ export class AssetUploader {
 
       const targetDir = subdir ? `${baseTarget}/${subdir}` : baseTarget;
       if (subdir) {
-        await this.ensureDirectory(targetDir);
+        await this.ensurePath(targetDir);
       }
 
       const file = this.toFile(data, filename);
-      const result = await FilePicker.upload(ASSET_SOURCE, targetDir, file, {
+      const result = await FP.upload(ASSET_SOURCE, targetDir, file, {
         notify: false,
       });
 
@@ -78,18 +89,43 @@ export class AssetUploader {
   // Internals
   // ============================================================================
 
-  /** Idempotent directory creation. Foundry returns an error if it exists; we swallow that. */
-  private async ensureDirectory(path: string): Promise<void> {
+  /**
+   * Ensure every segment of a path exists, creating each one in turn.
+   *
+   * Foundry's FilePicker.createDirectory only creates a leaf directory and
+   * fails with ENOENT if the parent doesn't exist. So we walk down from the
+   * top, creating each missing segment. Existing segments throw "already
+   * exists" errors which we swallow.
+   */
+  private async ensurePath(path: string): Promise<void> {
+    const segments = path.split('/').filter(Boolean);
+    let cumulative = '';
+    for (const segment of segments) {
+      cumulative = cumulative ? `${cumulative}/${segment}` : segment;
+      await this.createDirectoryIfMissing(cumulative);
+    }
+  }
+
+  /**
+   * Create a single directory level. Treats EEXIST as success. ENOENT and other
+   * errors are real and re-thrown so we don't proceed to upload into a missing
+   * directory (the cause of the original "Asset upload failed" bug).
+   */
+  private async createDirectoryIfMissing(path: string): Promise<void> {
+    const FP = getFilePicker();
     try {
-      await FilePicker.createDirectory(ASSET_SOURCE, path);
+      await FP.createDirectory(ASSET_SOURCE, path);
+      log.debug('created directory', path);
     } catch (err) {
-      // EEXIST-equivalent — directory already exists, which is fine.
-      // Foundry surfaces this as a thrown string or Error depending on version.
       const msg = (err as Error)?.message ?? String(err);
-      if (!/EEXIST|already exists/i.test(msg)) {
-        // Some other error — re-throw
-        log.warn('directory creation failed, continuing optimistically:', path, msg);
+      if (/EEXIST|already exists/i.test(msg)) {
+        // Already present — fine
+        log.debug('directory already exists', path);
+        return;
       }
+      // ENOENT means a parent is missing; that's a bug in our own walk logic,
+      // not something to swallow. Anything else is also a real failure.
+      throw new Error(`Could not create directory ${path}: ${msg}`);
     }
   }
 
