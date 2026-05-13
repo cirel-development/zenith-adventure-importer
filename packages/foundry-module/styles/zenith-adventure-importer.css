@@ -262,21 +262,27 @@
   font-size: 12px;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.12s, border-color 0.12s;
+  /* Inherit from the dialog so contrast works in both light and dark themes —
+     using a fixed --color-text-dark-* would leave us invisible on dark
+     backgrounds. */
+  color: inherit;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
 }
 
 .zenith-button-undo:hover {
-  background: rgba(185, 69, 69, 0.06);
-  border-color: rgba(185, 69, 69, 0.3);
+  background: rgba(185, 69, 69, 0.12);
+  border-color: rgba(185, 69, 69, 0.4);
 }
 
 .zenith-button-undo i {
   flex-shrink: 0;
-  color: var(--color-text-dark-secondary, #6f6f6f);
+  color: inherit;
+  opacity: 0.7;
 }
 
 .zenith-button-undo:hover i {
-  color: #b94545;
+  color: #d96a6a;
+  opacity: 1;
 }
 
 .zenith-undo-label {
@@ -288,5 +294,6 @@
   display: block;
   margin-top: 2px;
   font-size: 11px;
-  color: var(--color-text-dark-secondary, #6f6f6f);
+  /* Opacity-based dimming instead of explicit color — adapts to theme */
+  opacity: 0.7;
 }
