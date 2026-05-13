@@ -1,11 +1,11 @@
 import { MODULE_ID } from '../constants.js';
 import type { PhaseProgress, ImportSummary } from '../pipeline/Importer.js';
+import type { UndoSummary } from './UndoHandler.js';
 
 /**
- * Progress dialog with three states:
- *   1. Running — phase name + progress bar + current item
- *   2. Complete — summary with counts + close button
- *   3. Error — error message + close button
+ * Progress dialog with two operation modes (import or undo) and three states
+ * (running / complete / error). Mode affects window title and the labels in
+ * the complete and error views — the running view is generic enough to share.
  */
 export const ProgressDialog = (() => {
   const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -30,12 +30,23 @@ export const ProgressDialog = (() => {
     };
 
     private state: 'running' | 'complete' | 'error' = 'running';
+    private mode: 'import' | 'undo' = 'import';
     private currentProgress: PhaseProgress = {
       phase: 'idle',
       message: 'Starting...',
     };
     private summary: ImportSummary | null = null;
+    private undoSummary: UndoSummary | null = null;
     private errorMessage = '';
+
+    /** Set before showing the dialog so the running view uses correct title. */
+    setMode(mode: 'import' | 'undo'): void {
+      this.mode = mode;
+      const window = (this as any).window;
+      if (window) {
+        window.title = mode === 'undo' ? 'Undoing...' : 'Importing...';
+      }
+    }
 
     override async _prepareContext(options: unknown): Promise<unknown> {
       const baseContext = await (super._prepareContext as any)(options);
@@ -46,9 +57,12 @@ export const ProgressDialog = (() => {
 
       return Object.assign({}, baseContext, {
         state: this.state,
+        mode: this.mode,
+        isUndo: this.mode === 'undo',
         progress: this.currentProgress,
         percent,
         summary: this.summary,
+        undoSummary: this.undoSummary,
         errorMessage: this.errorMessage,
         phaseDisplay: this.formatPhase(this.currentProgress.phase),
       });
@@ -66,7 +80,7 @@ export const ProgressDialog = (() => {
     }
 
     // ============================================================================
-    // Public state-update methods called by Importer
+    // Public state-update methods
     // ============================================================================
 
     async updateProgress(progress: PhaseProgress): Promise<void> {
@@ -78,10 +92,21 @@ export const ProgressDialog = (() => {
     async showSummary(summary: ImportSummary): Promise<void> {
       this.summary = summary;
       this.state = 'complete';
-      // Update window title
+      this.mode = 'import';
       const window = (this as any).window;
       if (window) {
         window.title = 'Import Complete';
+      }
+      await this.render(false);
+    }
+
+    async showUndoSummary(summary: UndoSummary): Promise<void> {
+      this.undoSummary = summary;
+      this.state = 'complete';
+      this.mode = 'undo';
+      const window = (this as any).window;
+      if (window) {
+        window.title = 'Undo Complete';
       }
       await this.render(false);
     }
@@ -91,7 +116,7 @@ export const ProgressDialog = (() => {
       this.state = 'error';
       const window = (this as any).window;
       if (window) {
-        window.title = 'Import Failed';
+        window.title = this.mode === 'undo' ? 'Undo Failed' : 'Import Failed';
       }
       await this.render(false);
     }
@@ -123,7 +148,7 @@ export const ProgressDialog = (() => {
         case 'finalizing':
           return 'Finalizing';
         case 'rolling-back':
-          return 'Rolling back';
+          return this.mode === 'undo' ? 'Removing entities' : 'Rolling back';
         case 'complete':
           return 'Complete';
         case 'error':

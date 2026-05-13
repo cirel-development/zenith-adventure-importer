@@ -61,7 +61,6 @@ Hooks.on('getSceneControlButtons', ((controls: Record<string, any>) => {
     icon: 'fas fa-book-open',
     button: true,
     onChange: () => openImportDialog(),
-    onClick: () => openImportDialog(), // older v13 builds use onClick
   };
 }) as (...args: unknown[]) => void);
 

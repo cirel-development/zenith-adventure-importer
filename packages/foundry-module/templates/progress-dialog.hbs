@@ -21,20 +21,27 @@
       <div class="zenith-icon-success">
         <i class="fas fa-check-circle"></i>
       </div>
-      <h3>{{summary.adventureTitle}}</h3>
-      <p class="zenith-summary-line">
-        Created {{summary.entitiesCreated}} entities and uploaded {{summary.assetsUploaded}} assets.
-      </p>
 
-      {{#if summary.warnings.length}}
-        <details class="zenith-warnings">
-          <summary>{{summary.warnings.length}} warnings during processing</summary>
-          <ul>
-            {{#each summary.warnings}}
-              <li>{{this}}</li>
-            {{/each}}
-          </ul>
-        </details>
+      {{#if isUndo}}
+        <h3>{{undoSummary.adventureTitle}}</h3>
+        <p class="zenith-summary-line">
+          Removed {{undoSummary.entitiesDeleted}} entities. The bundle can now be re-imported.
+        </p>
+      {{else}}
+        <h3>{{summary.adventureTitle}}</h3>
+        <p class="zenith-summary-line">
+          Created {{summary.entitiesCreated}} entities and uploaded {{summary.assetsUploaded}} assets.
+        </p>
+        {{#if summary.warnings.length}}
+          <details class="zenith-warnings">
+            <summary>{{summary.warnings.length}} warnings during processing</summary>
+            <ul>
+              {{#each summary.warnings}}
+                <li>{{this}}</li>
+              {{/each}}
+            </ul>
+          </details>
+        {{/if}}
       {{/if}}
 
       <div class="zenith-actions">
@@ -48,10 +55,14 @@
       <div class="zenith-icon-error">
         <i class="fas fa-exclamation-triangle"></i>
       </div>
-      <h3>Import failed</h3>
+      <h3>{{#if isUndo}}Undo failed{{else}}Import failed{{/if}}</h3>
       <pre class="zenith-error-message">{{errorMessage}}</pre>
       <p class="zenith-hint">
-        Any partial state has been rolled back. Check the browser console (F12) for full error details.
+        {{#if isUndo}}
+          Some entities may have been deleted before the failure. Check the browser console (F12) for full error details.
+        {{else}}
+          Any partial state has been rolled back. Check the browser console (F12) for full error details.
+        {{/if}}
       </p>
       <div class="zenith-actions">
         <button type="button" id="zenith-close" class="zenith-button-primary">Close</button>

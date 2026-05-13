@@ -1,6 +1,7 @@
 import { MODULE_ID } from '../constants.js';
 import { Importer, type ImportSource } from '../pipeline/Importer.js';
 import { ProgressDialog } from './ProgressDialog.js';
+import { UndoHandler } from './UndoHandler.js';
 import { log } from '../log.js';
 
 /**
@@ -35,8 +36,17 @@ export function buildImportDialog(): typeof foundry.applications.api.Application
 
     override async _prepareContext(options: unknown): Promise<unknown> {
       const baseContext = await (super._prepareContext as any)(options);
+      const latest = UndoHandler.latestImport();
       return Object.assign({}, baseContext, {
         moduleId: MODULE_ID,
+        latestImport: latest
+          ? {
+              title: latest.adventureTitle,
+              entityCount: latest.createdEntities.length,
+              importedAt: formatRelativeTime(latest.importedAt),
+              bundleId: latest.bundleId,
+            }
+          : null,
       });
     }
 
@@ -89,6 +99,13 @@ export function buildImportDialog(): typeof foundry.applications.api.Application
       cancelButton?.addEventListener('click', (e) => {
         e.preventDefault();
         this.close();
+      });
+
+      // Undo last import button — only present when there's history.
+      const undoButton = root.querySelector<HTMLButtonElement>('#zenith-undo-last');
+      undoButton?.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.handleUndoLast();
       });
     }
 
@@ -145,6 +162,7 @@ export function buildImportDialog(): typeof foundry.applications.api.Application
       // Hand off to ProgressDialog. Close this one.
       await this.close();
       const progress = new (ProgressDialog as any)();
+      progress.setMode('import');
       await progress.render(true);
 
       const importer = new Importer();
@@ -158,6 +176,47 @@ export function buildImportDialog(): typeof foundry.applications.api.Application
         progress.showError(err instanceof Error ? err.message : String(err));
       }
     }
+
+    private async handleUndoLast(): Promise<void> {
+      const latest = UndoHandler.latestImport();
+      if (!latest) {
+        ui.notifications.info('No imports to undo.');
+        return;
+      }
+
+      // Build a confirmation dialog. Foundry v13 ships DialogV2 on
+      // foundry.applications.api — use it for native styling.
+      const DialogV2 = (foundry.applications.api as any).DialogV2;
+      const confirmed = await DialogV2.confirm({
+        window: { title: 'Undo Last Import' },
+        content: `
+          <p>This will permanently delete <strong>${latest.createdEntities.length} entities</strong> created by the import of <strong>${escapeHtml(latest.adventureTitle)}</strong>.</p>
+          <p>All folders, journals, actors, items, and playlists from that import will be removed. This cannot be undone — but the bundle can be re-imported afterwards.</p>
+          <p>Proceed?</p>
+        `,
+        rejectClose: false,
+        modal: true,
+      });
+
+      if (!confirmed) return;
+
+      await this.close();
+
+      const progress = new (ProgressDialog as any)();
+      progress.setMode('undo');
+      await progress.render(true);
+
+      const handler = new UndoHandler();
+      handler.onProgress((p) => progress.updateProgress(p));
+
+      try {
+        const summary = await handler.undo(latest);
+        progress.showUndoSummary(summary);
+      } catch (err) {
+        log.error('undo error surfaced to UI:', err);
+        progress.showError(err instanceof Error ? err.message : String(err));
+      }
+    }
   } as unknown as typeof foundry.applications.api.ApplicationV2;
 }
 
@@ -167,4 +226,38 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/** Human-readable relative time for the imported-at timestamp. */
+function formatRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'recently';
+  const seconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (ch) => {
+    switch (ch) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&#39;';
+      default:
+        return ch;
+    }
+  });
 }

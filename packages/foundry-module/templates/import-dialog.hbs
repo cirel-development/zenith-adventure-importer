@@ -52,4 +52,16 @@
       Import
     </button>
   </div>
+
+  {{#if latestImport}}
+    <div class="zenith-undo-section">
+      <button type="button" id="zenith-undo-last" class="zenith-button-undo" title="Delete entities from {{latestImport.title}}">
+        <i class="fas fa-undo"></i>
+        <span class="zenith-undo-label">
+          Undo last import: <strong>{{latestImport.title}}</strong>
+          <span class="zenith-undo-meta">({{latestImport.entityCount}} entities · {{latestImport.importedAt}})</span>
+        </span>
+      </button>
+    </div>
+  {{/if}}
 </div>

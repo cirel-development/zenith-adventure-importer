@@ -33,13 +33,17 @@ const SAMPLE_DIR = join(HERE, 'the-haunted-mill');
 //   console.log('Goblin Warrior:', monster.find(m => m.name === 'Goblin Warrior')?.uuid);
 //   const equip = await game.packs.get('pf2e.equipment-srd').getDocuments();
 //   console.log('Dagger:', equip.find(i => i.name === 'Dagger')?.uuid);
+//   console.log('Weapon Potency (+1):', equip.find(i => i.name === 'Weapon Potency (+1)')?.uuid);
 //   console.log('Striking:', equip.find(i => i.name === 'Striking')?.uuid);
 //
 // If a constant is left as `null`, the corresponding test entity is skipped.
+// Note: a striking rune requires a potency rune on the same weapon by PF2e rules,
+// so we apply both together.
 const COMPENDIUM_UUIDS = {
-  goblinWarrior: 'Compendium.pf2e.pathfinder-monster-core.Actor.fLLKuOXwPq1Iq0U4',
-  dagger: 'Compendium.pf2e.equipment-srd.Item.rQWaJhI5Bko5x14Z',
-  strikingRune: 'Compendium.pf2e.equipment-srd.Item.DxCuJKynlnMQZHgp',
+  goblinWarrior: 'Compendium.pf2e.pathfinder-monster-core.Actor.fLLKuOXwPq1Iq0U4' as string | null,
+  dagger: 'Compendium.pf2e.equipment-srd.Item.rQWaJhI5Bko5x14Z' as string | null,
+  weaponPotency1: null as string | null, // fill this in from your install
+  strikingRune: 'Compendium.pf2e.equipment-srd.Item.DxCuJKynlnMQZHgp' as string | null,
 };
 
 // ============================================================================
@@ -199,18 +203,28 @@ function buildItemEntities() {
     });
   }
 
-  // Test 4: compendium-ref-with-runes — base dagger + striking rune.
-  // Exercises the rune application path that's never been tested.
-  if (COMPENDIUM_UUIDS.dagger && COMPENDIUM_UUIDS.strikingRune) {
+  // Test 4: compendium-ref-with-runes — base dagger + potency + striking.
+  // PF2e rule: a striking rune requires a potency rune on the same weapon,
+  // so we apply both together. Exercises the multi-rune stacking path.
+  if (
+    COMPENDIUM_UUIDS.dagger &&
+    COMPENDIUM_UUIDS.weaponPotency1 &&
+    COMPENDIUM_UUIDS.strikingRune
+  ) {
     entities.push({
       slug: 'striking-dagger',
-      name: 'Striking Dagger',
+      name: '+1 Striking Dagger',
       category: 'weapon',
       folder: 'haunted-mill-items',
       data: {
         kind: 'compendium-ref-with-runes',
         base_uuid: COMPENDIUM_UUIDS.dagger,
         runes: [
+          {
+            type: 'weapon-potency',
+            uuid: COMPENDIUM_UUIDS.weaponPotency1,
+            rank: 1,
+          },
           {
             type: 'striking',
             uuid: COMPENDIUM_UUIDS.strikingRune,
@@ -629,7 +643,7 @@ console.log('Compendium-ref test coverage:');
 console.log(`  Goblin Warrior:   ${COMPENDIUM_UUIDS.goblinWarrior ? 'enabled' : 'skipped (no UUID configured)'}`);
 console.log(`  Drift fallback:   ${COMPENDIUM_UUIDS.goblinWarrior ? 'enabled' : 'skipped'}`);
 console.log(`  Plain dagger:     ${COMPENDIUM_UUIDS.dagger ? 'enabled' : 'skipped (no UUID configured)'}`);
-console.log(`  Runed dagger:     ${COMPENDIUM_UUIDS.dagger && COMPENDIUM_UUIDS.strikingRune ? 'enabled' : 'skipped'}`);
+console.log(`  Runed dagger:     ${COMPENDIUM_UUIDS.dagger && COMPENDIUM_UUIDS.weaponPotency1 && COMPENDIUM_UUIDS.strikingRune ? 'enabled' : 'skipped (needs dagger + weapon-potency + striking UUIDs)'}`);
 console.log('');
 
 console.log('Validating bundle against contract...');
