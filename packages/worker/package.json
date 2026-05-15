@@ -1,0 +1,29 @@
+{
+  "name": "@ai-adventure/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Phase 1 worker: PDF in, validated adventure bundle out",
+  "bin": {
+    "zenith-worker": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx watch src/cli.ts",
+    "process": "tsx src/cli.ts process"
+  },
+  "dependencies": {
+    "@ai-adventure/contract": "workspace:*",
+    "@anthropic-ai/sdk": "^0.30.1",
+    "dotenv": "^16.4.5",
+    "fflate": "^0.8.2",
+    "pdfjs-dist": "^4.7.76",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}

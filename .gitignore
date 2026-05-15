@@ -33,3 +33,4 @@ foundrydata/
 # Lock files we don't want
 package-lock.json
 yarn.lock
+PATCH-README.md
