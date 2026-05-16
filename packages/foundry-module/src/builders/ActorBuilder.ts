@@ -243,24 +243,52 @@ export class ActorBuilder {
     statBlock: Extract<StatBlock, { kind: 'custom' }>,
     assetMap: AssetMap,
   ): Record<string, unknown> {
-    // PF2e NPC schema is verbose. We build the system data block then
-    // wrap it in the actor envelope.
+    // Hazards have an entirely different PF2e schema than NPCs. We could keep
+    // forcing them through the NPC schema, but the Foundry UI then renders
+    // them as Creature 2 sheets which loses the trap/disable/reset semantics
+    // entirely. Better: branch on category at the top and build the right
+    // shape for each.
+    if (entry.category === 'hazard') {
+      return {
+        type: 'hazard',
+        system: this.buildPF2eHazardSystem(statBlock),
+        items: [], // hazards don't have embedded strikes/actions the same way
+      };
+    }
+
+    // Future: handle category === 'loot' here. For now NPC, creature, and
+    // any other category all share the NPC sheet — that matches what Paizo
+    // does (creatures and NPCs are both `type: 'npc'` in their data files).
     const system = this.buildPF2eNpcSystem(statBlock);
     const items = this.buildPF2eEmbeddedItems(statBlock, assetMap);
 
     return {
-      type: 'npc',
+      type: this.npcOrCharacterType(entry.category),
       system,
       items,
     };
   }
 
   /**
+   * Map our category to a PF2e actor `type`. NPCs and creatures both use the
+   * 'npc' type — that's the PF2e convention. Hazards branch off elsewhere
+   * (see buildCustom). Loot will branch off when we add it. Character type
+   * is reserved for the four-pregens case if we ever want them as proper PCs;
+   * for Phase 2A pregens come through as 'npc' which is the safer default.
+   */
+  private npcOrCharacterType(_category: ActorEntry['category']): string {
+    return 'npc';
+  }
+
+  /**
    * The system.* portion of a PF2e NPC actor.
    *
-   * This is the boilerplate that turns "level 5, AC 22, HP 78, +13 to hit"
-   * into the nested object the PF2e system module expects. Field names match
-   * what PF2e's TypeScript types declare.
+   * Schema notes (verified against PF2e Remaster, system version 7.x):
+   *   - rarity lives at system.traits.rarity, NOT system.details.rarity
+   *   - alignment is system.details.alignment.value, optional
+   *   - publicNotes (the GM-facing Notes tab) is system.details.publicNotes
+   *     as raw HTML
+   *   - traits.value is the array of trait keywords (lowercase)
    */
   private buildPF2eNpcSystem(
     sb: Extract<StatBlock, { kind: 'custom' }>,
@@ -271,12 +299,16 @@ export class ActorBuilder {
         alliance: 'opposition',
         creatureType: '',
         languages: { value: sb.languages },
-        rarity: sb.rarity,
-        ...(sb.alignment ? { alignment: { value: sb.alignment } } : {}),
+        publicNotes: sb.tactics_html ?? '',
+        privateNotes: '',
+        ...(sb.alignment && sb.alignment !== 'no-alignment'
+          ? { alignment: { value: sb.alignment } }
+          : {}),
       },
       traits: {
         size: { value: sb.size },
         value: sb.traits,
+        rarity: sb.rarity,
       },
       abilities: {
         str: { mod: sb.abilities.str },
@@ -312,6 +344,55 @@ export class ActorBuilder {
       ),
       perception: {
         senses: sb.senses.map((s) => ({ type: s })),
+      },
+    };
+  }
+
+  /**
+   * The system.* portion of a PF2e Hazard actor.
+   *
+   * Hazards are simpler than NPCs — no abilities, no senses, no inventory.
+   * The mechanics-block prose lives in the description fields. PF2e's hazard
+   * sheet then renders Stealth DC, Disable DC, AC, saves separately from the
+   * description, but we don't have those parsed out in Phase 2A. The verbatim
+   * mechanics block in publicNotes gives the GM the real numbers regardless.
+   */
+  private buildPF2eHazardSystem(
+    sb: Extract<StatBlock, { kind: 'custom' }>,
+  ): Record<string, unknown> {
+    return {
+      details: {
+        level: { value: sb.level },
+        publicNotes: sb.tactics_html ?? '',
+        privateNotes: '',
+        isComplex: false,
+        disable: '', // disable-action description; left empty in Phase 2A
+        reset: '', // reset rules; left empty in Phase 2A
+        routine: '', // routine on-trigger text; left empty in Phase 2A
+      },
+      traits: {
+        value: sb.traits.length > 0 ? sb.traits : ['mechanical'],
+        rarity: sb.rarity,
+        // Hazards have an `otherTags` field rather than a size field
+        otherTags: [],
+      },
+      attributes: {
+        hp: { value: sb.hp, max: sb.hp },
+        ac: { value: sb.ac },
+        hardness: 0,
+        emitsSound: 'encounter' as const,
+        stealth: {
+          value: sb.perception, // best guess; real value comes in Phase 2B
+          dc: 0,
+        },
+        immunities: sb.immunities.map((type) => ({ type })),
+        weaknesses: sb.weaknesses.map((w) => ({ type: w.type, value: w.value })),
+        resistances: sb.resistances.map((r) => ({ type: r.type, value: r.value })),
+      },
+      saves: {
+        fortitude: { value: sb.saves.fortitude },
+        reflex: { value: sb.saves.reflex },
+        will: { value: sb.saves.will },
       },
     };
   }

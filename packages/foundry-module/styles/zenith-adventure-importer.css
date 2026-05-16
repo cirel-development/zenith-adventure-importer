@@ -262,10 +262,10 @@
   font-size: 12px;
   text-align: left;
   cursor: pointer;
-  /* Inherit from the dialog so contrast works in both light and dark themes —
-     using a fixed --color-text-dark-* would leave us invisible on dark
-     backgrounds. */
-  color: inherit;
+  /* Foundry v13 exposes theme-aware text via --color-text. Fall back to
+     light-text on dark backgrounds (most Foundry skins are dark by default),
+     since `color: inherit` loses against Foundry's global <button> selector. */
+  color: var(--color-text, #f0f0e0);
   transition: background-color 0.12s, border-color 0.12s, color 0.12s;
 }
 
@@ -274,10 +274,25 @@
   border-color: rgba(185, 69, 69, 0.4);
 }
 
+/* Force every descendant — including <strong>, <span>, and <i> — to use the
+   button's color. Otherwise Foundry's nested-element rules override us.
+   Specificity needs to beat Foundry's global selectors, hence the long path. */
+.zenith-button-undo,
+.zenith-button-undo *,
+.zenith-button-undo .zenith-undo-label,
+.zenith-button-undo .zenith-undo-label strong,
+.zenith-button-undo .zenith-undo-meta {
+  color: var(--color-text, #f0f0e0);
+}
+
 .zenith-button-undo i {
   flex-shrink: 0;
-  color: inherit;
   opacity: 0.7;
+}
+
+.zenith-button-undo:hover,
+.zenith-button-undo:hover * {
+  color: var(--color-text, #f0f0e0);
 }
 
 .zenith-button-undo:hover i {
@@ -290,10 +305,15 @@
   line-height: 1.3;
 }
 
+.zenith-undo-label strong {
+  font-weight: 600;
+}
+
 .zenith-undo-meta {
   display: block;
   margin-top: 2px;
   font-size: 11px;
-  /* Opacity-based dimming instead of explicit color — adapts to theme */
-  opacity: 0.7;
+  /* Slightly dimmed via opacity so the meta info reads as secondary
+     without breaking theme adaptation */
+  opacity: 0.65;
 }
