@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "sample": "tsx samples/build-sample.ts && tsx samples/round-trip-test.ts",
     "deploy": "npm run build && cp -r dist/* /opt/foundrydata/Data/modules/zenith-adventure-importer/ && pm2 restart foundry",
-    "bump": "node scripts/bump-version.mjs"
+    "bump": "node scripts/bump-version.mjs",
+    "test:mappings": "tsx tests/pf2eMappings.check.ts"
   },
   "dependencies": {
     "@ai-adventure/contract": "workspace:*",

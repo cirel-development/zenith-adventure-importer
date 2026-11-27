@@ -2,6 +2,7 @@ import { MODULE_ID, MODULE_TITLE } from './constants.js';
 import { registerSettings } from './settings.js';
 import { buildImportDialog } from './apps/ImportDialog.js';
 import { log } from './log.js';
+import { selfTest, registerQuench } from './testing/fixtureSuite.js';
 
 // ============================================================================
 // Init: register settings before world is ready
@@ -25,9 +26,14 @@ Hooks.once('ready', () => {
   if (module) {
     module.api = {
       openImportDialog,
+      /** Imports zenith-fixtures/test-bundle.zip, checks every fixture, undoes it. */
+      selfTest,
     };
   }
 });
+
+// Quench (optional): registers the same fixture cases as a Quench batch.
+Hooks.on('quenchReady', ((quench: unknown) => registerQuench(quench)) as (...args: unknown[]) => void);
 
 // ============================================================================
 // Sidebar buttons — add an "Import" button to relevant directory headers

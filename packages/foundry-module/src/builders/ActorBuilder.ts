@@ -8,6 +8,13 @@ import type { AssetMap } from '../pipeline/AssetUploader.js';
 import type { EntityRegistry } from '../pipeline/EntityRegistry.js';
 import type { CompendiumLookup } from '../compendium/CompendiumLookup.js';
 import { log } from '../log.js';
+import { toPf2eLanguages, toPf2eSize } from './pf2eMappings.js';
+
+/** Language slugs PF2e knows at runtime; undefined outside Foundry. */
+function pf2eLanguageSlugs(): string[] | undefined {
+  const langs = (CONFIG as any)?.PF2E?.languages;
+  return langs ? Object.keys(langs) : undefined;
+}
 
 declare const Actor: { create(data: unknown): Promise<ActorDoc> };
 
@@ -289,6 +296,8 @@ export class ActorBuilder {
    *   - publicNotes (the GM-facing Notes tab) is system.details.publicNotes
    *     as raw HTML
    *   - traits.value is the array of trait keywords (lowercase)
+   *   - traits.size.value is a PF2e slug (tiny/sm/med/lg/huge/grg), and
+   *     details.languages.value holds Remaster language slugs (PF2e 8.7.1)
    */
   private buildPF2eNpcSystem(
     sb: Extract<StatBlock, { kind: 'custom' }>,
@@ -298,7 +307,7 @@ export class ActorBuilder {
         level: { value: sb.level },
         alliance: 'opposition',
         creatureType: '',
-        languages: { value: sb.languages },
+        languages: toPf2eLanguages(sb.languages, pf2eLanguageSlugs()),
         publicNotes: sb.tactics_html ?? '',
         privateNotes: '',
         ...(sb.alignment && sb.alignment !== 'no-alignment'
@@ -306,7 +315,7 @@ export class ActorBuilder {
           : {}),
       },
       traits: {
-        size: { value: sb.size },
+        size: { value: toPf2eSize(sb.size) },
         value: sb.traits,
         rarity: sb.rarity,
       },
@@ -355,7 +364,11 @@ export class ActorBuilder {
    * The mechanics-block prose lives in the description fields. PF2e's hazard
    * sheet then renders Stealth DC, Disable DC, AC, saves separately from the
    * description, but we don't have those parsed out in Phase 2A. The verbatim
-   * mechanics block in publicNotes gives the GM the real numbers regardless.
+   * mechanics block in details.description gives the GM the real numbers.
+   *
+   * PF2e 8.7.1 hazards have no publicNotes/privateNotes fields (verified on
+   * Foundry 14.371): details are description, level, isComplex, disable,
+   * routine, reset, publication. Anything else is silently dropped.
    */
   private buildPF2eHazardSystem(
     sb: Extract<StatBlock, { kind: 'custom' }>,
@@ -363,8 +376,7 @@ export class ActorBuilder {
     return {
       details: {
         level: { value: sb.level },
-        publicNotes: sb.tactics_html ?? '',
-        privateNotes: '',
+        description: sb.tactics_html ?? '',
         isComplex: false,
         disable: '', // disable-action description; left empty in Phase 2A
         reset: '', // reset rules; left empty in Phase 2A

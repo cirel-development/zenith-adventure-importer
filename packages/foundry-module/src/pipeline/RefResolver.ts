@@ -154,11 +154,15 @@ export class RefResolver {
       if (!foundryActor) continue;
 
       const updates: Record<string, unknown> = {};
-      const publicNotes = (foundryActor as any).system?.details?.publicNotes;
-      if (typeof publicNotes === 'string' && publicNotes.includes('[[REF:')) {
-        const resolved = this.resolveContent(publicNotes, registry);
-        if (resolved !== publicNotes) {
-          updates['system.details.publicNotes'] = resolved;
+      // NPCs keep tactics in publicNotes; PF2e hazards have no publicNotes,
+      // so their text lives in details.description (see ActorBuilder).
+      for (const field of ['publicNotes', 'description'] as const) {
+        const html = (foundryActor as any).system?.details?.[field];
+        if (typeof html === 'string' && html.includes('[[REF:')) {
+          const resolved = this.resolveContent(html, registry);
+          if (resolved !== html) {
+            updates[`system.details.${field}`] = resolved;
+          }
         }
       }
 
