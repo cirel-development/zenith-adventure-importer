@@ -21,6 +21,17 @@ const EncounterDataZ = z.object({
   creatures: z.array(z.string()).default([]), // names only, Phase 2 resolves to UUIDs
 });
 
+/**
+ * Slug-style chapter assignment. Lowercase, hyphenated. Matches the chapter
+ * name slugged. Null means the entity belongs to the adventure as a whole
+ * (pregens, adventure-wide items, overview material) and lives under the
+ * "Overview" subfolder.
+ *
+ * Worker uses this to slot each entity into a per-chapter subfolder so the
+ * Foundry sidebar mirrors the adventure structure.
+ */
+const ChapterAssignmentZ = z.string().nullable().default(null);
+
 const NpcDataZ = z.object({
   name: z.string(),
   role: z.string(),
@@ -45,6 +56,8 @@ const NpcDataZ = z.object({
   traits: z.array(z.string()).default([]),
   /** Spoken languages, e.g. ['Common', 'Sylvan']. */
   languages: z.array(z.string()).default([]),
+  /** Which chapter this NPC appears in. Null = adventure-wide (Overview folder). */
+  chapter_slug: ChapterAssignmentZ,
 });
 
 const HazardDataZ = z.object({
@@ -58,6 +71,8 @@ const HazardDataZ = z.object({
    * parse it into structured fields.
    */
   mechanics: z.string().optional(),
+  /** Which chapter this hazard appears in. Null = adventure-wide. */
+  chapter_slug: ChapterAssignmentZ,
 });
 
 const ItemDataZ = z.object({
@@ -65,6 +80,8 @@ const ItemDataZ = z.object({
   description: z.string(),
   /** Free-text item type — Phase 2 maps to a compendium item if possible. */
   kind: z.string().optional(),
+  /** Which chapter this item appears in. Null = adventure-wide. */
+  chapter_slug: ChapterAssignmentZ,
 });
 
 const LocationDataZ = z.object({
@@ -78,6 +95,12 @@ const LocationDataZ = z.object({
 
 const ChapterDataZ = z.object({
   name: z.string(),
+  /**
+   * Lowercase, hyphenated slug. NPCs, hazards, items, and playlists reference
+   * this via their `chapter_slug` field to assign themselves to this chapter
+   * for folder organization.
+   */
+  slug: z.string(),
   summary: z.string(),
   locations: z.array(LocationDataZ).default([]),
 });
@@ -135,6 +158,14 @@ const EXTRACT_TOOL_SCHEMA = {
         type: 'object',
         properties: {
           name: { type: 'string' },
+          slug: {
+            type: 'string',
+            description:
+              'Lowercase, hyphenated slug for this chapter, e.g. "harvesters-camp", ' +
+              '"adventure-background". Used by NPCs, items, hazards, and playlists ' +
+              'to reference this chapter via their chapter_slug field for folder ' +
+              'organization. Keep slugs short and unique within the adventure.',
+          },
           summary: { type: 'string' },
           locations: {
             type: 'array',
@@ -159,7 +190,7 @@ const EXTRACT_TOOL_SCHEMA = {
             },
           },
         },
-        required: ['name', 'summary'],
+        required: ['name', 'slug', 'summary'],
       },
     },
     encounters: {
@@ -239,6 +270,14 @@ const EXTRACT_TOOL_SCHEMA = {
             items: { type: 'string' },
             description: 'Languages from the Languages line, e.g. ["Common", "Sylvan"].',
           },
+          chapter_slug: {
+            type: ['string', 'null'],
+            description:
+              'Slug of the chapter this NPC first appears in. Must match a slug ' +
+              'from the chapters array. Use null for pre-generated PCs, ' +
+              'adventure-wide recurring NPCs, or anyone introduced outside any ' +
+              'specific chapter.',
+          },
         },
         required: ['name', 'role', 'description'],
       },
@@ -268,6 +307,12 @@ const EXTRACT_TOOL_SCHEMA = {
               'Trigger ..., Effect ..., Reset ...). Preserve numbers and structure ' +
               'exactly as printed.',
           },
+          chapter_slug: {
+            type: ['string', 'null'],
+            description:
+              'Slug of the chapter this hazard appears in. Null if it spans the ' +
+              'whole adventure.',
+          },
         },
         required: ['name', 'description'],
       },
@@ -284,6 +329,13 @@ const EXTRACT_TOOL_SCHEMA = {
             type: 'string',
             description:
               'Brief item type, e.g. "magic weapon", "key", "treasure", "consumable"',
+          },
+          chapter_slug: {
+            type: ['string', 'null'],
+            description:
+              'Slug of the chapter this item first appears in. Null for items ' +
+              'that span the whole adventure (overview-level reference items, ' +
+              'pre-gen starting equipment, etc.).',
           },
         },
         required: ['name', 'description'],
@@ -306,6 +358,11 @@ GENERAL
 - For descriptions, write GM-facing prose — concise, useful, no marketing fluff.
 - If a value isn't present in the source, use null or sensible defaults rather than inventing.
 - If the adventure uses Paizo-style area codes (A1, B3, etc), preserve them. If not, leave area_code null.
+
+CHAPTER ASSIGNMENT
+For NPCs, hazards, and items, set \`chapter_slug\` to indicate where each one first appears in the adventure. The value must match a \`slug\` you set on one of the chapters (e.g. "harvesters-camp"). Use null for entities that belong to the adventure as a whole rather than to any one chapter — typically pre-generated PCs, the four standard ambience playlists, recurring NPCs introduced before any chapter begins, or items used across multiple chapters. This drives folder organization in Foundry; one subfolder per chapter, plus an "Overview" subfolder for null assignments.
+
+Chapter slugs are your own naming. Keep them short, lowercase, hyphenated, and unique within the adventure. They don't need to match anything outside this extraction.
 
 NPCS AND CREATURES (the \`npcs\` array)
 - Extract one entry per DISTINCT named character OR distinct stat block. If an encounter has "Jinkin Ripclaws (3)" then "Jinkin Ripclaw" gets ONE entry — not three.

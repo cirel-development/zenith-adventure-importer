@@ -62,44 +62,93 @@ export function assembleBundle(
   // adventure modules organize themselves in Foundry: one "Adventure Name"
   // folder in each of the Actors, Items, Journals, and Playlists sidebars.
   //
-  // Path slugs are suffixed by type to keep them unique within the bundle's
-  // folder list. The display name is just the adventure title for all four.
+  // Inside each top-level folder we add per-chapter subfolders so the GM's
+  // sidebar mirrors the adventure structure. Entities without a chapter_slug
+  // assignment go into an "Overview" subfolder under each type.
+  //
+  // Folder identity in the contract: each folder has a flat slug (no
+  // slashes) plus a parent_path that defines hierarchy. Entities reference
+  // their folder via path (parent_path + slug joined by /).
   const actorsPath = `${adventureSlug}-actors`;
   const itemsPath = `${adventureSlug}-items`;
   const journalsPath = `${adventureSlug}-journals`;
   const playlistsPath = `${adventureSlug}-playlists`;
 
+  type EntityType = 'actor' | 'item' | 'journal' | 'playlist';
+
+  const topLevelOf = (type: EntityType): string =>
+    ({ actor: actorsPath, item: itemsPath, journal: journalsPath, playlist: playlistsPath }[type]);
+
+  /** Bare slug of a chapter subfolder, distinct per type for cross-type uniqueness. */
+  const chapterSubSlug = (type: EntityType, chapterSlug: string): string =>
+    `${chapterSlug}-${type}`;
+
+  /** Bare slug of an Overview subfolder for a given entity type. */
+  const overviewSubSlug = (type: EntityType): string => `overview-${type}`;
+
+  // Chapter slugs come from the AI, so normalize them and drop duplicates.
+  // Maps every raw slug the AI used for a chapter to the folder slug we emit.
+  const chapterSlugMap = new Map<string, string>();
+  /** Unique, normalized chapter slugs in chapter order (one folder each). */
+  const chapterFolderSlugs: { slug: string; name: string }[] = [];
+  for (const chapter of extracted.chapters) {
+    const normalized = slugify(chapter.slug) || slugify(chapter.name);
+    if (!normalized) continue;
+    chapterSlugMap.set(chapter.slug, normalized);
+    chapterSlugMap.set(normalized, normalized);
+    if (!chapterFolderSlugs.some((c) => c.slug === normalized)) {
+      chapterFolderSlugs.push({ slug: normalized, name: chapter.name });
+    }
+  }
+
+  /**
+   * Path used by entities to declare folder placement: parent + own slug.
+   * An unknown chapter_slug (AI typo or hallucination) falls back to Overview
+   * so the entity never points at a folder that does not exist.
+   */
+  const chapterFolderFor = (type: EntityType, chapterSlug: string | null | undefined): string => {
+    const parent = topLevelOf(type);
+    const known = chapterSlug ? chapterSlugMap.get(chapterSlug) ?? chapterSlugMap.get(slugify(chapterSlug)) : undefined;
+    const own = known ? chapterSubSlug(type, known) : overviewSubSlug(type);
+    return `${parent}/${own}`;
+  };
+
   // ----- Folders -----
-  const folders: Bundle['folders']['entities'] = [
-    {
-      slug: journalsPath,
+  const folders: Bundle['folders']['entities'] = [];
+
+  // Four top-level adventure folders
+  const topLevelTypes: EntityType[] = ['journal', 'actor', 'item', 'playlist'];
+  for (const type of topLevelTypes) {
+    folders.push({
+      slug: topLevelOf(type),
       name: extracted.title,
       parent_path: null,
-      type: 'journal',
+      type,
       sort: 0,
-    },
-    {
-      slug: actorsPath,
-      name: extracted.title,
-      parent_path: null,
-      type: 'actor',
+    });
+  }
+
+  // Per-chapter subfolders + an Overview subfolder under each type
+  for (const type of topLevelTypes) {
+    folders.push({
+      slug: overviewSubSlug(type),
+      name: 'Overview',
+      parent_path: topLevelOf(type),
+      type,
       sort: 0,
-    },
-    {
-      slug: itemsPath,
-      name: extracted.title,
-      parent_path: null,
-      type: 'item',
-      sort: 0,
-    },
-    {
-      slug: playlistsPath,
-      name: extracted.title,
-      parent_path: null,
-      type: 'playlist',
-      sort: 0,
-    },
-  ];
+    });
+  }
+  chapterFolderSlugs.forEach((chapter, idx) => {
+    for (const type of topLevelTypes) {
+      folders.push({
+        slug: chapterSubSlug(type, chapter.slug),
+        name: chapter.name,
+        parent_path: topLevelOf(type),
+        type,
+        sort: idx + 1, // Overview at 0 stays on top
+      });
+    }
+  });
 
   // ----- Journals -----
   // Overview journal (synopsis + how-to-run) at the adventure root.
@@ -109,7 +158,7 @@ export function assembleBundle(
       slug: overviewSlug,
       name: `${extracted.title} — Overview`,
       type: 'instructional',
-      folder: journalsPath,
+      folder: chapterFolderFor('journal', null), // overview subfolder
       default_permission: 'none',
       pages: [
         {
@@ -186,7 +235,7 @@ export function assembleBundle(
       slug: journalSlug,
       name: chapter.name,
       type: 'scene_entry',
-      folder: journalsPath,
+      folder: chapterFolderFor('journal', chapter.slug),
       default_permission: 'none',
       pages,
       sort: idx,
@@ -203,7 +252,7 @@ export function assembleBundle(
     slug: slugs.next(`${npc.category === 'creature' ? 'creature' : 'npc'}-${npc.name}`),
     name: npc.name,
     category: npc.category,
-    folder: actorsPath,
+    folder: chapterFolderFor('actor', npc.chapter_slug),
     stat_block: {
       kind: 'custom',
       level: npc.level ?? 0,
@@ -255,7 +304,7 @@ export function assembleBundle(
       slug: slugs.next(`hazard-${haz.name}`),
       name: haz.name,
       category: 'hazard' as const,
-      folder: actorsPath,
+      folder: chapterFolderFor('actor', haz.chapter_slug),
       stat_block: {
         kind: 'custom',
         level: haz.level ?? 0,
@@ -307,7 +356,7 @@ export function assembleBundle(
     // type. Phase 2 will map "kind" hints from the extraction into proper
     // categories (magic_item, consumable, etc).
     category: 'equipment',
-    folder: itemsPath,
+    folder: chapterFolderFor('item', item.chapter_slug),
     data: {
       kind: 'custom',
       item_type: 'equipment',
@@ -339,12 +388,14 @@ export function assembleBundle(
   const scenes: Bundle['scenes']['entities'] = [];
 
   // ----- Playlists -----
-  // Two per chapter (ambience + combat) plus one adventure-wide.
+  // Two per chapter (ambience + combat) plus one adventure-wide. The
+  // adventure-wide themes playlist goes in the Overview subfolder so the
+  // GM has a clear "where do I drop cross-chapter music" slot.
   const playlists: Bundle['playlists']['entities'] = [
     {
       slug: slugs.next(`${adventureSlug}-themes`),
       name: `${extracted.title} — Themes`,
-      folder: playlistsPath,
+      folder: chapterFolderFor('playlist', null),
       mode: 'sequential',
     },
   ];
@@ -352,13 +403,13 @@ export function assembleBundle(
     playlists.push({
       slug: slugs.next(`ch-${idx + 1}-ambience`),
       name: `Chapter ${idx + 1}: ${chapter.name} — Ambience`,
-      folder: playlistsPath,
+      folder: chapterFolderFor('playlist', chapter.slug),
       mode: 'sequential',
     });
     playlists.push({
       slug: slugs.next(`ch-${idx + 1}-combat`),
       name: `Chapter ${idx + 1}: ${chapter.name} — Combat`,
-      folder: playlistsPath,
+      folder: chapterFolderFor('playlist', chapter.slug),
       mode: 'shuffle',
     });
   });

@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/cli.ts",
     "process": "tsx src/cli.ts process",
-    "test:bundle": "tsx tests/build-test-bundle.ts"
+    "test:bundle": "tsx tests/build-test-bundle.ts",
+    "test:chapters": "tsx tests/assemble-chapters.check.ts"
   },
   "dependencies": {
     "@ai-adventure/contract": "workspace:*",
