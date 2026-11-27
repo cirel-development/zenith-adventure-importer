@@ -18,7 +18,9 @@
     "test:chapters": "tsx tests/assemble-chapters.check.ts",
     "build:index": "tsx scripts/build-compendium-index.ts",
     "test:index": "tsx tests/compendium-index.check.ts",
-    "test:match": "tsx tests/match.check.ts"
+    "test:match": "tsx tests/match.check.ts",
+    "test:statblocks": "tsx tests/statblock-accuracy.ts",
+    "test:statblock": "tsx tests/statblock.check.ts"
   },
   "dependencies": {
     "@ai-adventure/contract": "workspace:*",

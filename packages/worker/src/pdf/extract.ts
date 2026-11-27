@@ -36,6 +36,20 @@ function resolveWorkerSrc(): string {
  *   PDFs (typeset from a text editor) extract cleanly. Scanned PDFs need OCR.
  *   Most Paizo adventures are born-digital.
  */
+/**
+ * Remove store purchase watermarks from page text. Paizo store PDFs stamp
+ * every page with "paizo.com #<order>, <buyer name> <<buyer email>>, <date>"
+ * plus runs of tracking numbers. That is the buyer's personal data: it must
+ * not reach the AI prompt, the stat-block parser, or a bundle.
+ */
+export function stripPurchaseWatermarks(text: string): string {
+  return text
+    .replace(/paizo\.com\s?#\d+,\s?[^<]{0,120}<[^<>\s]+@[^<>\s]+>,\s?[A-Z][a-z]{2,8}\.?\s\d{1,2},\s\d{4}/g, ' ')
+    .replace(/(?:\b\d{6,9}\b\s+){2,}\b\d{6,9}\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export async function extractPdf(filePath: string): Promise<ExtractedPdf> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
@@ -74,8 +88,9 @@ export async function extractPdf(filePath: string): Promise<ExtractedPdf> {
       .replace(/\s+/g, ' ')
       .trim();
 
-    pages.push(text);
-    totalCharacters += text.length;
+    const clean = stripPurchaseWatermarks(text);
+    pages.push(clean);
+    totalCharacters += clean.length;
   }
 
   return {
