@@ -88,9 +88,13 @@ export class ActorBuilder {
     // Apply common fields (folder, name override, portrait, flags)
     data['folder'] = folderId;
     data['name'] = entry.name;
+    // Merge, don't replace: buildFromCompendium may already have set
+    // driftWarning / placeholder flags under our namespace.
+    const existingFlags = (data['flags'] as Record<string, any> | undefined) ?? {};
     data['flags'] = {
-      ...(data['flags'] as Record<string, unknown> ?? {}),
+      ...existingFlags,
       'zenith-adventure-importer': {
+        ...(existingFlags['zenith-adventure-importer'] ?? {}),
         slug: entry.slug,
         category: entry.category,
         ...(entry.ai_metadata?.review_required
@@ -229,6 +233,17 @@ export class ActorBuilder {
 
     if (statBlock.name_override) {
       source['name'] = statBlock.name_override;
+    }
+
+    // Adventure-specific text goes after the compendium's own text. NPCs keep
+    // notes in details.publicNotes; PF2e hazards have no publicNotes, so for
+    // them it goes in details.description (see buildPF2eHazardSystem).
+    if (statBlock.notes_html) {
+      const system = (source['system'] ??= {}) as Record<string, any>;
+      const details = (system['details'] ??= {}) as Record<string, unknown>;
+      const field = source['type'] === 'hazard' ? 'description' : 'publicNotes';
+      const existing = typeof details[field] === 'string' ? (details[field] as string) : '';
+      details[field] = `${existing}${existing ? '<hr>' : ''}<h3>In this adventure</h3>${statBlock.notes_html}`;
     }
 
     // If we matched by name fallback, flag the actor so the GM knows

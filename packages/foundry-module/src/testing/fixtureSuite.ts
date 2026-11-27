@@ -22,7 +22,7 @@ import { getAllImportRecords, getImportRecord, type ImportRecord } from '../sett
 /** Served by Foundry from <Data>/zenith-fixtures/ (setup.ps1 copies it there). */
 export const FIXTURE_PATH = 'zenith-fixtures/test-bundle.zip';
 const FIXTURE_ADVENTURE_SLUG = 'test-bundle-2a';
-const EXPECTED_ACTORS = 16;
+const EXPECTED_ACTORS = 18; // 16 custom + 2 compendium-ref
 const EXPECTED_ENTITIES = 4 /* folders */ + 1 /* journal */ + 1 /* item */ + EXPECTED_ACTORS;
 
 export interface SuiteState {
@@ -226,6 +226,30 @@ export const cases: TestCase[] = [
       const known = Object.keys((CONFIG as any).PF2E.languages);
       const bad = (langs as string[]).filter((l) => !known.includes(l));
       eq(bad.length, 0, `slugs not in CONFIG.PF2E.languages (${fmt(bad)})`);
+    },
+  },
+  {
+    name: 'compendium-ref NPC: Monster Core goblin + adventure notes overlay',
+    run: (s) => {
+      const a = actor(s, 'compendium-npc');
+      eq(a.type, 'npc', 'type');
+      eq(a.name, 'Compendium Test — Goblin Warrior', 'name from bundle');
+      eq(src(a, 'system.details.level.value'), -1, 'level from compendium');
+      ok((a.items?.size ?? 0) > 0, 'compendium strikes/abilities came along');
+      const notes = String(src(a, 'system.details.publicNotes') ?? '');
+      ok(notes.includes('<h3>In this adventure</h3>') && notes.includes('ZENITH-OVERLAY-NPC'), 'overlay appended to publicNotes');
+      eq(notes.split('ZENITH-OVERLAY-NPC').length - 1, 1, 'overlay appears exactly once');
+      eq(a.getFlag('zenith-adventure-importer', 'slug'), 'compendium-npc', 'zenith flags kept');
+    },
+  },
+  {
+    name: 'compendium-ref hazard: real hazard stats + overlay in description',
+    run: (s) => {
+      const a = actor(s, 'compendium-hazard');
+      eq(a.type, 'hazard', 'type');
+      ok(typeof src(a, 'system.attributes.stealth.value') === 'number', 'structured stealth from compendium');
+      const desc = String(src(a, 'system.details.description') ?? '');
+      ok(desc.includes('ZENITH-OVERLAY-HAZARD'), 'overlay appended to details.description');
     },
   },
   {

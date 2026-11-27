@@ -6,6 +6,8 @@ import {
   type Bundle,
 } from '@ai-adventure/contract';
 import type { ExtractedAdventure } from '../pipeline/extractAdventure.js';
+import type { CompendiumIndex } from '../compendium/index.js';
+import { planActorMatches, type ActorMatchDecision } from '../compendium/match.js';
 
 // ============================================================================
 // Slug helpers
@@ -44,6 +46,11 @@ export interface AssembleOptions {
   adventureSlug?: string;
   /** Token usage from the extraction call, recorded in the manifest. */
   aiTokens?: { input: number; output: number };
+  /**
+   * PF2e compendium index. When given, NPCs/creatures/hazards that match
+   * (see compendium/match.ts) become compendium-refs; the rest stay custom.
+   */
+  compendium?: CompendiumIndex;
 }
 
 export function assembleBundle(
@@ -243,16 +250,46 @@ export function assembleBundle(
   });
 
   // ----- Actors -----
-  // Every NPC, creature, AND hazard becomes a custom-kind actor. Stats are
-  // placeholder pending Phase 2 stat-block parsing — the manifest warns the
-  // GM about this. What 2A did change: traits, size, rarity, alignment,
-  // category, languages all come from the AI extraction instead of being
-  // hardcoded to "humanoid medium common N".
-  const npcActors = extracted.npcs.map((npc) => ({
-    slug: slugs.next(`${npc.category === 'creature' ? 'creature' : 'npc'}-${npc.name}`),
-    name: npc.name,
-    category: npc.category,
-    folder: chapterFolderFor('actor', npc.chapter_slug),
+  // NPCs, creatures and hazards that match the PF2e compendium (Phase 2B,
+  // see compendium/match.ts) become compendium-refs carrying the adventure's
+  // own text as notes_html. Everything else is a custom actor with
+  // placeholder stats pending stat-block parsing — the manifest warns the GM.
+  const plan = opts.compendium ? planActorMatches(opts.compendium, extracted) : null;
+  const versionPin = opts.compendium ? `pf2e@${opts.compendium.version}` : undefined;
+
+  const compendiumActor = (
+    base: { slug: string; name: string; category: Bundle['actors']['entities'][number]['category']; folder: string },
+    decision: ActorMatchDecision,
+    notesHtml: string,
+  ): Bundle['actors']['entities'][number] => ({
+    ...base,
+    stat_block: {
+      kind: 'compendium-ref',
+      uuid: decision.match.uuid,
+      ...(versionPin ? { version_pin: versionPin } : {}),
+      notes_html: notesHtml,
+    },
+    ai_metadata: {
+      confidence: decision.confidence,
+      extracted_at: new Date().toISOString(),
+      prompt_version: 'worker-phase-2b',
+      review_required: decision.reviewReasons.length > 0,
+      review_reasons: decision.reviewReasons,
+    },
+  });
+
+  const npcActors = extracted.npcs.map((npc, i) => {
+    const base = {
+      slug: slugs.next(`${npc.category === 'creature' ? 'creature' : 'npc'}-${npc.name}`),
+      name: npc.name,
+      category: npc.category,
+      folder: chapterFolderFor('actor', npc.chapter_slug),
+    };
+    const notesHtml = `<p><strong>Role:</strong> ${escapeHtml(npc.role)}</p><p>${escapeHtml(npc.description)}</p>`;
+    const decision = plan?.npcs[i];
+    if (decision) return compendiumActor(base, decision, notesHtml);
+    return {
+    ...base,
     stat_block: {
       kind: 'custom',
       level: npc.level ?? 0,
@@ -280,7 +317,7 @@ export function assembleBundle(
       actions: [],
       spellcasting: [],
       inventory: [],
-      tactics_html: `<p><strong>Role:</strong> ${escapeHtml(npc.role)}</p><p>${escapeHtml(npc.description)}</p>`,
+      tactics_html: notesHtml,
     } as Bundle['actors']['entities'][number]['stat_block'],
     ai_metadata: {
       confidence: 0.4,
@@ -291,20 +328,28 @@ export function assembleBundle(
         'Phase 1 placeholder stats — replace with real PF2e stat block before play.',
       ],
     },
-  }));
+  } as Bundle['actors']['entities'][number];
+  });
 
   // Hazards are also actors in PF2e (category: 'hazard'). Stat numbers are
   // placeholder; the mechanics block goes into tactics_html so the GM can
   // read the real DCs and damage formulas pending Phase 2 parsing.
-  const hazardActors = extracted.hazards.map((haz) => {
+  const hazardActors = extracted.hazards.map((haz, i) => {
     const mechanicsHtml = haz.mechanics
       ? `<hr><h4>Mechanics</h4><pre style="white-space:pre-wrap">${escapeHtml(haz.mechanics)}</pre>`
       : '';
-    return {
+    const base = {
       slug: slugs.next(`hazard-${haz.name}`),
       name: haz.name,
       category: 'hazard' as const,
       folder: chapterFolderFor('actor', haz.chapter_slug),
+    };
+    const decision = plan?.hazards[i];
+    // A compendium hazard has real structured stats, so the overlay only
+    // needs the adventure's prose, not the verbatim mechanics block.
+    if (decision) return compendiumActor(base, decision, `<p>${escapeHtml(haz.description)}</p>`);
+    return {
+      ...base,
       stat_block: {
         kind: 'custom',
         level: haz.level ?? 0,
@@ -344,10 +389,11 @@ export function assembleBundle(
           'Phase 1 placeholder stats — replace mechanics block contents with real hazard stat values before play.',
         ],
       },
-    };
+    } as Bundle['actors']['entities'][number];
   });
 
   const actors: Bundle['actors']['entities'] = [...npcActors, ...hazardActors];
+  const compendiumActorCount = actors.filter((a) => a.stat_block.kind === 'compendium-ref').length;
 
   // ----- Items -----
   const items: Bundle['items']['entities'] = extracted.items.map((item) => ({
@@ -450,9 +496,9 @@ export function assembleBundle(
       journals: journals.length,
       playlists: playlists.length,
       actors: {
-        compendium: 0,
-        custom: actors.length,
-        review_needed: actors.length, // every Phase 1 NPC has placeholder stats
+        compendium: compendiumActorCount,
+        custom: actors.length - compendiumActorCount,
+        review_needed: actors.filter((a) => a.ai_metadata?.review_required).length,
       },
       items: {
         compendium: 0,
@@ -468,11 +514,17 @@ export function assembleBundle(
         : undefined,
     },
     warnings: [
-      {
-        kind: 'partial_extraction',
-        message:
-          'Phase 1 extraction: NPC, creature, and hazard stats are placeholders. Replace with real PF2e stat blocks before play.',
-      },
+      ...(actors.length - compendiumActorCount > 0
+        ? [
+            {
+              kind: 'partial_extraction' as const,
+              message:
+                compendiumActorCount > 0
+                  ? `${compendiumActorCount} of ${actors.length} NPCs/creatures/hazards matched the PF2e compendium; the other ${actors.length - compendiumActorCount} have placeholder stats. Replace them with real PF2e stat blocks before play.`
+                  : 'Phase 1 extraction: NPC, creature, and hazard stats are placeholders. Replace with real PF2e stat blocks before play.',
+            },
+          ]
+        : []),
       {
         kind: 'partial_extraction',
         message:

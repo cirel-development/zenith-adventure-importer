@@ -27,6 +27,21 @@ import {
 } from './pipeline/extractAdventure.js';
 import { assembleBundle, validateAndZip } from './bundle/assemble.js';
 import { estimateTokensFromText } from './config.js';
+import { CompendiumIndex } from './compendium/index.js';
+import type { Bundle } from '@ai-adventure/contract';
+
+/** One line per actor: compendium match (pack, review flag) or custom. */
+export function printMatchSummary(bundle: Bundle): void {
+  const actors = bundle.actors.entities;
+  const refs = actors.filter((a) => a.stat_block.kind === 'compendium-ref');
+  console.log(`Compendium matches: ${refs.length} of ${actors.length} actors`);
+  for (const a of actors) {
+    const sb = a.stat_block;
+    const where = sb.kind === 'compendium-ref' ? sb.uuid.split('.').slice(2, 3)[0] : 'custom';
+    const flag = a.ai_metadata?.review_required ? '  [review]' : '';
+    console.log(`  ${a.category.padEnd(9)} ${a.name.padEnd(26)} ${where}${flag}`);
+  }
+}
 
 export async function runPrepare(inputPdf: string, outDir?: string): Promise<void> {
   const inputPath = resolve(inputPdf);
@@ -80,7 +95,9 @@ export async function runAssemble(inputPdf: string, extractionPath: string, outp
   const adventure = parseExtraction(data, 'Simulated extraction');
 
   const pdfBytes = new Uint8Array(await readFile(inputPath));
-  const bundle = assembleBundle(adventure, { pdfBytes });
+  const compendium = CompendiumIndex.load();
+  const bundle = assembleBundle(adventure, { pdfBytes, compendium });
+  printMatchSummary(bundle);
   const { zip, warnings } = validateAndZip(bundle);
   await writeFile(outputPath, zip);
 

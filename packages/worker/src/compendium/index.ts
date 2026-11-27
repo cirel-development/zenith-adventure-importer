@@ -25,6 +25,8 @@ export interface CompendiumMatch {
   type: string;
   level: number | null;
   rarity: string | null;
+  /** Pack tier: 1 Remaster core / items, 2 legacy core, 3 hazards, 4 other bestiaries. */
+  tier: number;
   /** How many index entries share this normalized name (and doc kind). */
   candidates: number;
 }
@@ -170,6 +172,7 @@ export class CompendiumIndex {
       type: e[3],
       level: e[4],
       rarity: e[5],
+      tier: p.tier,
       candidates: list.length,
     };
   }

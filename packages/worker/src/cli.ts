@@ -9,7 +9,8 @@ import { extractPdf } from './pdf/extract.js';
 import { AiClient } from './ai/client.js';
 import { extractAdventure } from './pipeline/extractAdventure.js';
 import { assembleBundle, validateAndZip } from './bundle/assemble.js';
-import { runAssemble, runPrepare } from './sim.js';
+import { printMatchSummary, runAssemble, runPrepare } from './sim.js';
+import { CompendiumIndex } from './compendium/index.js';
 
 // ============================================================================
 // Arg parsing — simple, no external dependency
@@ -197,7 +198,9 @@ async function runProcess(args: ParsedArgs): Promise<void> {
   const bundle = assembleBundle(adventure, {
     pdfBytes,
     aiTokens: { input: usage.inputTokens, output: usage.outputTokens },
+    compendium: CompendiumIndex.load(),
   });
+  printMatchSummary(bundle);
   const { zip, warnings } = validateAndZip(bundle);
   await writeFile(outputPath, zip);
   const step4Ms = Math.round(performance.now() - step4Start);

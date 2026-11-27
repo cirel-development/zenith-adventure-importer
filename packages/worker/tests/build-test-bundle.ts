@@ -39,6 +39,13 @@ import { createHash } from 'node:crypto';
 import { zipSync, strToU8 } from 'fflate';
 import type { Bundle } from '@ai-adventure/contract';
 import { validateBundle, CONTRACT_VERSION } from '@ai-adventure/contract';
+import { CompendiumIndex, type CompendiumMatch } from '../src/compendium/index.js';
+
+const INDEX = CompendiumIndex.load();
+function requireUuid(m: CompendiumMatch | null): string {
+  if (!m) throw new Error('compendium fixture not found in index — rebuild the index?');
+  return m.uuid;
+}
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_PATH = join(HERE, '..', 'test-bundle.zip');
@@ -274,6 +281,34 @@ const actors: Bundle['actors']['entities'] = [
     }),
     ...META,
   },
+
+  // -- Compendium refs (Phase 2B) — UUIDs from the pinned compendium index ----
+  {
+    slug: 'compendium-npc',
+    name: 'Compendium Test — Goblin Warrior',
+    category: 'creature',
+    folder: FOLDERS.actors,
+    stat_block: {
+      kind: 'compendium-ref',
+      uuid: requireUuid(INDEX.findCreature('Goblin Warrior')),
+      version_pin: `pf2e@${INDEX.version}`,
+      notes_html: '<p>ZENITH-OVERLAY-NPC: this goblin guards the test bundle.</p>',
+    },
+    ...META,
+  },
+  {
+    slug: 'compendium-hazard',
+    name: 'Compendium Test — Hidden Pit',
+    category: 'hazard',
+    folder: FOLDERS.actors,
+    stat_block: {
+      kind: 'compendium-ref',
+      uuid: requireUuid(INDEX.findHazard('Hidden Pit')),
+      version_pin: `pf2e@${INDEX.version}`,
+      notes_html: '<p>ZENITH-OVERLAY-HAZARD: dug under the test bundle.</p>',
+    },
+    ...META,
+  },
 ];
 
 const items: Bundle['items']['entities'] = [
@@ -375,7 +410,11 @@ const bundle: Bundle = {
       scenes: 0,
       journals: journals.length,
       playlists: 0,
-      actors: { compendium: 0, custom: actors.length, review_needed: actors.length },
+      actors: {
+        compendium: actors.filter((a) => a.stat_block.kind === 'compendium-ref').length,
+        custom: actors.filter((a) => a.stat_block.kind === 'custom').length,
+        review_needed: actors.length,
+      },
       items: { compendium: 0, custom: items.length, review_needed: 0 },
     },
     warnings: [

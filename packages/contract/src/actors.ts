@@ -39,6 +39,11 @@ const CompendiumRefStatBlockSchema = z.object({
   // Override the compendium's default name if the adventure renames the creature
   // (e.g. compendium "Shadow Cultist" → adventure "Shadow Cultist of the Veil")
   name_override: z.string().optional(),
+
+  // Adventure-specific text about this creature (role, tactics in this
+  // adventure). The module appends it to the compendium creature's notes
+  // under an "In this adventure" heading. Optional; additive in contract 1.0.
+  notes_html: z.string().optional(),
 });
 
 // ============================================================================
