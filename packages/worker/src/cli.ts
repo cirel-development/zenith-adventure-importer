@@ -11,6 +11,7 @@ import { extractAdventure } from './pipeline/extractAdventure.js';
 import { assembleBundle, validateAndZip } from './bundle/assemble.js';
 import { printMatchSummary, runAssemble, runPrepare } from './sim.js';
 import { CompendiumIndex } from './compendium/index.js';
+import { collectFallbackCandidates, runFallback } from './statblock/ai-fallback.js';
 
 // ============================================================================
 // Arg parsing — simple, no external dependency
@@ -21,6 +22,9 @@ interface ParsedArgs {
   input?: string;
   output?: string;
   extraction?: string;
+  fallback?: string;
+  fallbackThreshold?: number;
+  noCompendium?: boolean;
   yes: boolean;
   help: boolean;
 }
@@ -42,6 +46,12 @@ function parseArgs(argv: string[]): ParsedArgs {
       out.input = args[++i];
     } else if (a === '--extraction' || a === '-e') {
       out.extraction = args[++i];
+    } else if (a === '--fallback') {
+      out.fallback = args[++i];
+    } else if (a === '--fallback-threshold') {
+      out.fallbackThreshold = Number(args[++i]);
+    } else if (a === '--no-compendium') {
+      out.noCompendium = true;
     } else if (a === '--yes' || a === '-y') {
       out.yes = true;
     } else if (a === '--help' || a === '-h') {
@@ -68,6 +78,8 @@ Usage:
 
 Options:
   --extraction, -e  Tool-call JSON for "assemble"
+  --fallback        Stand-in model's answer to the stat-block fallback request ("assemble")
+  --fallback-threshold  Parse confidence below which a block goes to the fallback (default 0.7)
   --output, -o  Output zip path (default: <input>.bundle.zip)
   --yes,    -y  Skip the cost confirmation prompt
   --help,   -h  Show this message
@@ -195,10 +207,28 @@ async function runProcess(args: ParsedArgs): Promise<void> {
   const { readFile } = await import('node:fs/promises');
   const pdfBytes = new Uint8Array(await readFile(inputPath));
 
+  const compendium = CompendiumIndex.load();
+  const pdfText = pdf.pages.join('\n\n');
+
+  // Stat-block AI fallback (Phase 2B task 5): one batched request for blocks
+  // the regex parser could not read with confidence.
+  const candidates = collectFallbackCandidates(adventure, pdfText, compendium);
+  let statBlockFixes: Awaited<ReturnType<typeof runFallback>>['fixes'] | undefined;
+  let fallbackTokens = { input: 0, output: 0 };
+  if (candidates.length) {
+    console.log(`      Stat-block fallback: ${candidates.length} low-confidence block(s)`);
+    const fb = await runFallback(ai, candidates, config.maxOutputTokens);
+    statBlockFixes = fb.fixes;
+    fallbackTokens = { input: fb.inputTokens, output: fb.outputTokens };
+    console.log(`      Fallback: ${fb.batches} request(s), $${fb.cost.toFixed(4)}`);
+  }
+
   const bundle = assembleBundle(adventure, {
     pdfBytes,
-    aiTokens: { input: usage.inputTokens, output: usage.outputTokens },
-    compendium: CompendiumIndex.load(),
+    aiTokens: { input: usage.inputTokens + fallbackTokens.input, output: usage.outputTokens + fallbackTokens.output },
+    compendium,
+    pdfText,
+    statBlockFixes,
   });
   printMatchSummary(bundle);
   const { zip, warnings } = validateAndZip(bundle);
@@ -240,7 +270,11 @@ async function main(): Promise<void> {
       break;
     case 'assemble':
       if (!args.input || !args.extraction) throw new Error('assemble: need <input.pdf> and --extraction <file.json>');
-      await runAssemble(args.input, args.extraction, args.output);
+      await runAssemble(args.input, args.extraction, args.output, {
+        fallbackPath: args.fallback,
+        fallbackThreshold: args.fallbackThreshold,
+        noCompendium: args.noCompendium,
+      });
       break;
     default:
       console.error(`Unknown command: ${args.command}`);

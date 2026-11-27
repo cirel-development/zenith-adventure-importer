@@ -110,10 +110,20 @@ export function scanStatBlocks(rawText: string): ScannedBlock[] {
       if (h !== null) {
         endRel = h;
         endUncertain = false;
-        // Page split: defenses end at a sidebar, the offense (Speed, Strikes)
-        // continues after it. Join the two parts and end at the next heading.
-        if (form !== 'hazard' && speed === null) {
-          const cont = /\bSpeed\s(?:\d+\s?feet|fly|swim|climb|burrow)/.exec(after.slice(h));
+        // Page split: the block continues after a sidebar, page footer or
+        // chapter-navigation strip. Join the two parts and end at the next
+        // heading. Two cases:
+        //   - defenses, then the break, then "Speed ..." and the strikes;
+        //   - "Speed ..." printed, then the break, then the strikes.
+        if (form !== 'hazard') {
+          const window = after.slice(h, Math.min(after.length, h + 3000));
+          const strikeBeforeCut = speed !== null && /\b(?:Melee|Ranged)\s\[/.test(after.slice(speed, h));
+          const cont =
+            speed === null
+              ? /\bSpeed\s(?:\d+\s?feet|fly|swim|climb|burrow)/.exec(window)
+              : strikeBeforeCut
+                ? null
+                : /\b(?:Melee|Ranged)\s\[/.exec(window);
           if (cont) {
             const contStart = h + cont.index;
             const contEnd = headingAt(contStart) ?? after.length;

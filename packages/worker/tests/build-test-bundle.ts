@@ -282,6 +282,39 @@ const actors: Bundle['actors']['entities'] = [
     ...META,
   },
 
+  // -- Parsed stat block (Phase 2B task 7) — real values in every shape the
+  //    parser produces; the module must map each to PF2e 8.x fields. --------
+  {
+    slug: 'parsed-full',
+    name: 'Parsed Test — Bramble Hound',
+    category: 'creature',
+    folder: FOLDERS.actors,
+    stat_block: {
+      ...customStatBlock({ level: 3, size: 'medium', rarity: 'uncommon', traits: ['animal', 'plant'], languages: ['Sylvan'] }),
+      hp: 48,
+      ac: 19,
+      saves: { fortitude: 12, reflex: 9, will: 7 },
+      abilities: { str: 4, dex: 2, con: 3, int: -4, wis: 1, cha: -2 },
+      perception: 9,
+      senses: ['low-light vision', 'scent (imprecise) 30 feet', 'smoke vision'],
+      skills: [
+        { name: 'Athletics', bonus: 10 },
+        { name: 'Stealth', bonus: 8, note: '+10 in forests' },
+        { name: 'Forest Lore', bonus: 7 },
+      ],
+      speeds: { land: 30, climb: 15 },
+      immunities: ['poison', 'sleep', 'bramble magic'],
+      weaknesses: [{ type: 'axes', value: 5 }, { type: 'cold iron', value: 3 }],
+      resistances: [{ type: 'piercing', value: 5 }],
+      strikes: [
+        { name: 'jaws', type: 'melee', attack_bonus: 12, damage_formula: '1d10+4 piercing plus 1d4 persistent bleed', effects: ['Grab'], traits: ['agile', 'reach 10 feet'] },
+        { name: 'thorn', type: 'ranged', attack_bonus: 10, damage_formula: '1d6 piercing', traits: ['range increment 30 feet'] },
+        { name: 'seed pod', type: 'ranged', attack_bonus: 10, damage_formula: '', effects: ['sickened 1'], traits: ['thrown 20 feet'] },
+      ],
+    },
+    ...META,
+  },
+
   // -- Compendium refs (Phase 2B) — UUIDs from the pinned compendium index ----
   {
     slug: 'compendium-npc',
@@ -293,6 +326,19 @@ const actors: Bundle['actors']['entities'] = [
       uuid: requireUuid(INDEX.findCreature('Goblin Warrior')),
       version_pin: `pf2e@${INDEX.version}`,
       notes_html: '<p>ZENITH-OVERLAY-NPC: this goblin guards the test bundle.</p>',
+    },
+    ...META,
+  },
+  {
+    slug: 'compendium-variant',
+    name: 'Compendium Test — Goblin Boss (variant)',
+    category: 'npc',
+    folder: FOLDERS.actors,
+    stat_block: {
+      kind: 'compendium-ref',
+      uuid: requireUuid(INDEX.findCreature('Goblin Warrior')),
+      version_pin: `pf2e@${INDEX.version}`,
+      overrides: { level: 0, rarity: 'unique', hp: 20, ac: 18, perception: 7, saves: { fortitude: 6, reflex: 9, will: 4 }, skills: [{ name: 'Athletics', bonus: 9 }] },
     },
     ...META,
   },

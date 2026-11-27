@@ -116,8 +116,9 @@ function findLabels(body: string): Map<Label, number> {
 
   const p = at(/\bPerception\b/, 0) ?? 0;
   if (at(/\bPerception\b/, 0) !== null) found.set('Perception', p);
-  const ac = at(/\bAC\s\d/, p);
-  const hp = at(/\bHP\s\d/, ac ?? p);
+  const ac = at(/\bAC\s\d/, p) ?? at(/\bAC\s\d/, 0);
+  // Variant blocks list only what changed, sometimes HP before AC.
+  const hp = at(/\bHP\s\d/, ac ?? p) ?? at(/\bHP\s\d/, 0);
   const speed = at(/\bSpeed\s(?:\d|fly|swim|climb|burrow)/, hp ?? ac ?? p);
   set('AC', ac);
   set('HP', hp);
@@ -329,7 +330,11 @@ export function parseStatBlock(scanned: ScannedBlock): ParseResult {
     defensiveText,
   };
 
-  // Confidence: weighted share of core fields found.
+  return { block, ...scoreParsed(block, scanned.endUncertain) };
+}
+
+/** Confidence: weighted share of core fields found, minus penalties. */
+export function scoreParsed(block: ParsedStatBlock, endUncertain = false): { confidence: number; missing: string[] } {
   const core: [string, boolean, number][] = [
     ['perception', block.perception !== null, 1],
     ['attributes', block.attributes !== null, 1],
@@ -341,9 +346,8 @@ export function parseStatBlock(scanned: ScannedBlock): ParseResult {
   ];
   const total = core.reduce((n, c) => n + c[2], 0);
   let confidence = core.reduce((n, c) => n + (c[1] ? c[2] : 0), 0) / total;
-  if (scanned.endUncertain) confidence -= 0.1;
+  if (endUncertain) confidence -= 0.1;
   if (block.strikes.some((s) => !s.effectOnly && s.damage.length === 0)) confidence -= 0.05;
   confidence = Math.max(0, Math.min(1, Math.round(confidence * 100) / 100));
-
-  return { block, confidence, missing: core.filter((c) => !c[1]).map((c) => c[0]) };
+  return { confidence, missing: core.filter((c) => !c[1]).map((c) => c[0]) };
 }

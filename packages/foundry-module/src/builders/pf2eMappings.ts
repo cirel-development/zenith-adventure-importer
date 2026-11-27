@@ -45,6 +45,147 @@ export function toPf2eHazardTraits(traits: readonly string[], known?: Iterable<s
   return out.length > 0 ? out : ['mechanical'];
 }
 
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+
+// ---------------------------------------------------------------------------
+// Senses — PF2e 8.7.1: system.perception.senses = [{ type, acuity?, range? }]
+// ---------------------------------------------------------------------------
+
+export interface Pf2eSense {
+  type: string;
+  acuity?: 'precise' | 'imprecise' | 'vague';
+  range?: number;
+}
+
+/**
+ * "low-light vision", "scent (imprecise) 30 feet", "tremorsense (imprecise) 60 feet".
+ * Senses PF2e doesn't know ("smoke vision") go to `details` as text.
+ */
+export function toPf2eSenses(senses: readonly string[], known?: Iterable<string>): { senses: Pf2eSense[]; details: string } {
+  const knownSet = known ? new Set(known) : null;
+  const out: Pf2eSense[] = [];
+  const unknown: string[] = [];
+  for (const raw of senses) {
+    const m = /^(.+?)(?:\s\((precise|imprecise|vague)\))?(?:\s(\d+)\s?feet)?$/i.exec(raw.trim());
+    const type = slugify(m?.[1] ?? raw);
+    if (m && type && (!knownSet || knownSet.has(type))) {
+      out.push({
+        type,
+        ...(m[2] ? { acuity: m[2].toLowerCase() as Pf2eSense['acuity'] } : {}),
+        ...(m[3] ? { range: Number(m[3]) } : {}),
+      });
+    } else if (raw.trim()) unknown.push(raw.trim());
+  }
+  return { senses: out, details: unknown.join(', ') };
+}
+
+// ---------------------------------------------------------------------------
+// Immunities / weaknesses / resistances — PF2e type slugs
+// ---------------------------------------------------------------------------
+
+/** Printed names whose PF2e slug is not just the slugified name. */
+const DEFENSE_ALIASES: Record<string, string> = {
+  axes: 'axe-vulnerability',
+  'visual effects': 'visual',
+  all: 'all-damage',
+  'all damage': 'all-damage',
+  'auditory effects': 'auditory',
+  'olfactory effects': 'olfactory',
+  'emotion effects': 'emotion',
+  'fear effects': 'fear-effects',
+};
+
+export function toPf2eDefenseType(name: string): string {
+  const n = name.trim().toLowerCase();
+  return DEFENSE_ALIASES[n] ?? slugify(n);
+}
+
+/**
+ * Keep entries PF2e knows (CONFIG.PF2E.immunityTypes etc.); return the rest
+ * as text. An unknown type can make PF2e reject the whole actor, so it never
+ * goes into the structured field.
+ */
+export function splitKnownDefenses<T extends { type: string }>(
+  entries: readonly T[],
+  known?: Iterable<string>,
+): { kept: T[]; unknownText: string } {
+  const knownSet = known ? new Set(known) : null;
+  const kept: T[] = [];
+  const unknown: string[] = [];
+  for (const e of entries) {
+    const type = toPf2eDefenseType(e.type);
+    if (!knownSet || knownSet.has(type)) kept.push({ ...e, type });
+    else unknown.push('value' in e ? `${e.type} ${(e as { value?: number }).value}` : e.type);
+  }
+  return { kept, unknownText: unknown.join(', ') };
+}
+
+// ---------------------------------------------------------------------------
+// Strikes — PF2e "melee" items (melee and ranged)
+// ---------------------------------------------------------------------------
+
+export interface Pf2eDamageRoll {
+  damage: string;
+  damageType: string;
+  category: 'persistent' | null;
+}
+
+/** "1d6+2 piercing plus 1d4 acid plus 1d4 persistent bleed" -> damage rolls. */
+export function toPf2eDamageRolls(formula: string): Pf2eDamageRoll[] {
+  if (!formula.trim()) return [];
+  return formula
+    .split(/\s+plus\s+/)
+    .map((part) => /^(\d+(?:d\d+)?(?:[+-]\d+)?)(?:\s(persistent))?(?:\s([a-z]+))?$/.exec(part.trim()))
+    .filter((m): m is RegExpExecArray => !!m)
+    .map((m) => ({ damage: m[1]!, damageType: m[3] ?? 'untyped', category: m[2] ? ('persistent' as const) : null }));
+}
+
+/**
+ * Printed strike traits -> PF2e trait slugs, pulling range out:
+ *   "reach 10 feet" -> reach-10, "thrown 20 feet" -> thrown-20, "versatile S" -> versatile-s,
+ *   "deadly d10" -> deadly-d10, "reload 1" -> reload-1,
+ *   "range increment 30 feet" -> range { increment: 30 }, "range 20 feet" -> range { max: 20 }.
+ */
+export function toPf2eStrikeTraits(traits: readonly string[]): {
+  traits: string[];
+  range: { increment: number | null; max: number | null } | null;
+} {
+  const out: string[] = [];
+  let range: { increment: number | null; max: number | null } | null = null;
+  for (const raw of traits) {
+    const t = raw.trim().toLowerCase();
+    const inc = /^range increment (\d+)\s?feet$/.exec(t);
+    const max = /^range (\d+)\s?feet$/.exec(t);
+    if (inc) range = { increment: Number(inc[1]), max: null };
+    else if (max) range = { increment: null, max: Number(max[1]) };
+    else out.push(slugify(t.replace(/\s?feet$/, '')));
+  }
+  return { traits: out.filter(Boolean), range };
+}
+
+/** "Grab", "Improved Knockdown" -> PF2e attackEffects slugs. */
+export function toPf2eAttackEffects(effects: readonly string[]): string[] {
+  return effects.map((e) => slugify(e)).filter(Boolean);
+}
+
+const SKILL_ALIASES: Record<string, string> = { arcane: 'arcana', occult: 'occultism' };
+
+/** Printed skill name -> PF2e skill slug ("Arcane" -> arcana). */
+export function toPf2eSkillSlug(name: string): string {
+  const s = slugify(name);
+  return SKILL_ALIASES[s] ?? s;
+}
+
+/** Lore skills are separate "lore" items on PF2e NPCs, not system.skills. */
+export function isLoreSkill(name: string): boolean {
+  return /\blore\b/i.test(name);
+}
+
 /** Pre-Remaster language names -> Remaster slugs. */
 const LEGACY_LANGUAGE_TO_REMASTER: Record<string, string> = {
   sylvan: 'fey',

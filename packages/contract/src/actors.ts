@@ -44,6 +44,26 @@ const CompendiumRefStatBlockSchema = z.object({
   // adventure). The module appends it to the compendium creature's notes
   // under an "In this adventure" heading. Optional; additive in contract 1.0.
   notes_html: z.string().optional(),
+
+  // Values that differ from the compendium creature, e.g. a printed
+  // "Variant redcap (Pathfinder Bestiary 278)" block. The module applies them
+  // after loading the base. Optional; additive in contract 1.0.
+  overrides: z
+    .object({
+      level: z.number().int().min(-1).max(30).optional(),
+      rarity: z.enum(['common', 'uncommon', 'rare', 'unique']).optional(),
+      hp: z.number().int().nonnegative().optional(),
+      ac: z.number().int().optional(),
+      perception: z.number().int().optional(),
+      saves: z.object({ fortitude: z.number().int(), reflex: z.number().int(), will: z.number().int() }).optional(),
+      // Same shape as PF2eAbilityModsSchema (declared later in this file).
+      attributes: z
+        .object({ str: z.number().int(), dex: z.number().int(), con: z.number().int(), int: z.number().int(), wis: z.number().int(), cha: z.number().int() })
+        .optional(),
+      skills: z.array(z.object({ name: z.string(), bonus: z.number().int() })).optional(),
+      speed: z.number().int().nonnegative().optional(),
+    })
+    .optional(),
 });
 
 // ============================================================================
@@ -86,7 +106,13 @@ const PF2eStrikeSchema = z.object({
   name: z.string(),
   type: z.enum(['melee', 'ranged']),
   attack_bonus: z.number().int(),
-  damage_formula: z.string(), // e.g. "1d8+4 piercing"
+  // e.g. "1d8+4 piercing", or several parts joined by " plus ":
+  // "1d6+2 piercing plus 1d4 acid plus 1d4 persistent bleed". May be "" for
+  // effect-only strikes.
+  damage_formula: z.string(),
+  // Extra effects on a hit, as printed: "Grab", "Knockdown", "sickened 1".
+  // Optional; additive in contract 1.0.
+  effects: z.array(z.string()).optional(),
   traits: z.array(z.string()).default([]),
   range_feet: z.number().int().positive().optional(),
   reload: z.string().optional(), // e.g. "1", "interact"
@@ -155,7 +181,8 @@ const CustomStatBlockSchema = z.object({
   senses: z.array(z.string()).default([]),
 
   skills: z
-    .array(z.object({ name: z.string(), bonus: z.number().int() }))
+    // note: conditional bonus as printed, e.g. "+7 traps" (optional, additive)
+    .array(z.object({ name: z.string(), bonus: z.number().int(), note: z.string().optional() }))
     .default([]),
   speeds: PF2eSpeedsSchema,
 

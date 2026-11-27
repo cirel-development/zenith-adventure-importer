@@ -8,6 +8,10 @@ import {
 import type { ExtractedAdventure } from '../pipeline/extractAdventure.js';
 import type { CompendiumIndex } from '../compendium/index.js';
 import { planActorMatches, type ActorMatchDecision } from '../compendium/match.js';
+import { scanStatBlocks } from '../statblock/scan.js';
+import { indexBlocks, linkStatBlock, toCustomStatBlock } from '../statblock/link.js';
+import { scoreParsed, type ParsedStatBlock } from '../statblock/parse.js';
+import { normalizeName } from '../compendium/index.js';
 
 // ============================================================================
 // Slug helpers
@@ -51,6 +55,17 @@ export interface AssembleOptions {
    * (see compendium/match.ts) become compendium-refs; the rest stay custom.
    */
   compendium?: CompendiumIndex;
+  /**
+   * The PDF's extracted text. When given, NPCs not matched in the compendium
+   * get real stats parsed from their stat block (statblock/link.ts).
+   */
+  pdfText?: string;
+  /**
+   * AI-fallback results (statblock/ai-fallback.ts), keyed by normalized NPC
+   * name: a regex parse merged with the model's answer for blocks the regex
+   * could not read with confidence.
+   */
+  statBlockFixes?: Map<string, ParsedStatBlock>;
 }
 
 export function assembleBundle(
@@ -255,6 +270,7 @@ export function assembleBundle(
   // own text as notes_html. Everything else is a custom actor with
   // placeholder stats pending stat-block parsing — the manifest warns the GM.
   const plan = opts.compendium ? planActorMatches(opts.compendium, extracted) : null;
+  const blockIndex = opts.pdfText ? indexBlocks(scanStatBlocks(opts.pdfText)) : null;
   const versionPin = opts.compendium ? `pf2e@${opts.compendium.version}` : undefined;
 
   const compendiumActor = (
@@ -288,6 +304,62 @@ export function assembleBundle(
     const notesHtml = `<p><strong>Role:</strong> ${escapeHtml(npc.role)}</p><p>${escapeHtml(npc.description)}</p>`;
     const decision = plan?.npcs[i];
     if (decision) return compendiumActor(base, decision, notesHtml);
+
+    // Parsed stat block from the PDF (Phase 2B task 4/7).
+    const linked = blockIndex ? linkStatBlock(npc.name, blockIndex) : null;
+
+    // A variant whose base is printed elsewhere ("Variant redcap (Pathfinder
+    // Bestiary 278)"): compendium base + the variant's own numbers.
+    if (linked && linked.scanned.form === 'variant' && !linked.base && linked.scanned.variantOf && opts.compendium) {
+      const baseMatch = opts.compendium.findCreature(linked.scanned.variantOf.name);
+      if (baseMatch) {
+        const v = linked.parse.block;
+        const overrides = {
+          level: v.level,
+          ...(v.rarity !== 'common' ? { rarity: v.rarity } : {}),
+          ...(v.hp !== null ? { hp: v.hp } : {}),
+          ...(v.ac !== null ? { ac: v.ac } : {}),
+          ...(v.perception !== null ? { perception: v.perception } : {}),
+          ...(v.saves ? { saves: v.saves } : {}),
+          ...(v.attributes ? { attributes: v.attributes } : {}),
+          ...(v.skills.length ? { skills: v.skills.map((s) => ({ name: s.name, bonus: s.bonus })) } : {}),
+          ...(v.speeds ? { speed: v.speeds.land } : {}),
+        };
+        const decision: ActorMatchDecision = {
+          match: baseMatch,
+          confidence: 0.7,
+          reviewReasons: [
+            `Variant of ${baseMatch.name} (${baseMatch.packLabel}); the variant's printed numbers were applied. Check strikes and abilities against the PDF.`,
+          ],
+        };
+        const actor = compendiumActor(base, decision, notesHtml);
+        (actor.stat_block as { overrides?: typeof overrides }).overrides = overrides;
+        return actor;
+      }
+    }
+
+    if (linked) {
+      const { scanned } = linked;
+      const fix = opts.statBlockFixes?.get(normalizeName(npc.name));
+      const parse = fix ? { block: fix, ...scoreParsed(fix) } : linked.parse;
+      const reasons: string[] = [];
+      if (fix) reasons.push(`Regex parse was low-confidence (${linked.parse.confidence}); missing fields were filled by the AI fallback. Check them against the PDF.`);
+      if (parse.missing.length) reasons.push(`Stat block parse is missing: ${parse.missing.join(', ')} (placeholder values used).`);
+      if (scanned.form === 'variant' && !linked.base && scanned.variantOf)
+        reasons.push(`Variant of ${scanned.variantOf.name} (${scanned.variantOf.source}); fields the variant doesn't list are placeholders.`);
+      if (parse.confidence < 0.7) reasons.push(`Low parse confidence (${parse.confidence}).`);
+      return {
+        ...base,
+        stat_block: toCustomStatBlock(parse.block, notesHtml),
+        ai_metadata: {
+          confidence: parse.confidence,
+          extracted_at: new Date().toISOString(),
+          prompt_version: fix ? 'statblock-ai-1' : 'statblock-regex-1',
+          review_required: reasons.length > 0,
+          review_reasons: reasons,
+        },
+      } as Bundle['actors']['entities'][number];
+    }
     return {
     ...base,
     stat_block: {
@@ -394,6 +466,8 @@ export function assembleBundle(
 
   const actors: Bundle['actors']['entities'] = [...npcActors, ...hazardActors];
   const compendiumActorCount = actors.filter((a) => a.stat_block.kind === 'compendium-ref').length;
+  const parsedActorCount = actors.filter((a) => a.ai_metadata?.prompt_version?.startsWith('statblock-')).length;
+  const placeholderActorCount = actors.length - compendiumActorCount - parsedActorCount;
 
   // ----- Items -----
   const items: Bundle['items']['entities'] = extracted.items.map((item) => ({
@@ -514,13 +588,13 @@ export function assembleBundle(
         : undefined,
     },
     warnings: [
-      ...(actors.length - compendiumActorCount > 0
+      ...(placeholderActorCount > 0
         ? [
             {
               kind: 'partial_extraction' as const,
               message:
-                compendiumActorCount > 0
-                  ? `${compendiumActorCount} of ${actors.length} NPCs/creatures/hazards matched the PF2e compendium; the other ${actors.length - compendiumActorCount} have placeholder stats. Replace them with real PF2e stat blocks before play.`
+                placeholderActorCount < actors.length
+                  ? `${compendiumActorCount} of ${actors.length} NPCs/creatures/hazards matched the PF2e compendium and ${parsedActorCount} use stats parsed from the PDF; the other ${placeholderActorCount} have placeholder stats. Replace them with real PF2e stat blocks before play.`
                   : 'Phase 1 extraction: NPC, creature, and hazard stats are placeholders. Replace with real PF2e stat blocks before play.',
             },
           ]

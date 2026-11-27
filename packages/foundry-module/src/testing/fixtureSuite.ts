@@ -22,7 +22,7 @@ import { getAllImportRecords, getImportRecord, type ImportRecord } from '../sett
 /** Served by Foundry from <Data>/zenith-fixtures/ (setup.ps1 copies it there). */
 export const FIXTURE_PATH = 'zenith-fixtures/test-bundle.zip';
 const FIXTURE_ADVENTURE_SLUG = 'test-bundle-2a';
-const EXPECTED_ACTORS = 18; // 16 custom + 2 compendium-ref
+const EXPECTED_ACTORS = 20; // 16 custom + 1 parsed + 3 compendium-ref
 const EXPECTED_ENTITIES = 4 /* folders */ + 1 /* journal */ + 1 /* item */ + EXPECTED_ACTORS;
 
 export interface SuiteState {
@@ -55,7 +55,10 @@ function fmt(v: unknown): string {
 }
 
 function eq(actual: unknown, expected: unknown, what: string): void {
-  if (actual !== expected) {
+  // Arrays/objects compare by content, not identity.
+  const same =
+    typeof expected === 'object' && expected !== null ? fmt(actual) === fmt(expected) : actual === expected;
+  if (!same) {
     throw new AssertionFailed(`${what}: expected ${fmt(expected)}, got ${fmt(actual)}`);
   }
 }
@@ -229,6 +232,56 @@ export const cases: TestCase[] = [
     },
   },
   {
+    name: 'parsed stats: core numbers land where PF2e 8.x reads them',
+    run: (s) => {
+      const a = actor(s, 'parsed-full');
+      eq(a.type, 'npc', 'type');
+      eq([src(a, 'system.attributes.hp.max'), src(a, 'system.attributes.ac.value')], [48, 19], 'hp/ac');
+      eq(src(a, 'system.perception.mod'), 9, 'perception at system.perception.mod');
+      eq(a.system.perception?.mod, 9, 'perception as the sheet computes it');
+      eq([src(a, 'system.saves.fortitude.value'), src(a, 'system.saves.reflex.value'), src(a, 'system.saves.will.value')], [12, 9, 7], 'saves');
+      eq(src(a, 'system.abilities.int.mod'), -4, 'attribute');
+      eq(src(a, 'system.attributes.speed.value'), 30, 'land speed');
+      eq((src(a, 'system.attributes.speed.otherSpeeds') as any[]).map((o) => `${o.type}:${o.value}`), ['climb:15'], 'other speeds');
+    },
+  },
+  {
+    name: 'parsed stats: senses, skills, lore, defenses mapped to PF2e slugs',
+    run: (s) => {
+      const a = actor(s, 'parsed-full');
+      eq(src(a, 'system.perception.senses'), [{ type: 'low-light-vision' }, { type: 'scent', acuity: 'imprecise', range: 30 }], 'senses');
+      eq(src(a, 'system.perception.details'), 'smoke vision', 'unknown sense kept as text');
+      eq([src(a, 'system.skills.athletics.base'), src(a, 'system.skills.stealth.base')], [10, 8], 'skills');
+      const lore = a.items.find((i: any) => i.type === 'lore');
+      eq([lore?.name, lore?.system?.mod?.value], ['Forest Lore', 7], 'lore skill is a lore item');
+      eq((src(a, 'system.attributes.immunities') as any[]).map((i) => i.type), ['poison', 'sleep'], 'known immunities');
+      eq((src(a, 'system.attributes.weaknesses') as any[]).map((w) => `${w.type}:${w.value}`), ['axe-vulnerability:5', 'cold-iron:3'], 'weakness slugs');
+      const notes = String(src(a, 'system.details.publicNotes') ?? '');
+      ok(notes.includes('Immunities: bramble magic'), 'unknown immunity kept in notes');
+      ok(notes.includes('Stealth +8 (+10 in forests)'), 'skill note kept in notes');
+    },
+  },
+  {
+    name: 'parsed stats: strikes with damage parts, persistent, effects, ranges',
+    run: (s) => {
+      const a = actor(s, 'parsed-full');
+      const strikes = a.items.filter((i: any) => i.type === 'melee');
+      eq(strikes.map((i: any) => i.name), ['jaws', 'thorn', 'seed pod'], 'strike names');
+      const jaws = strikes[0];
+      eq(jaws._source.system.bonus.value, 12, 'attack bonus');
+      eq(Object.values(jaws._source.system.damageRolls).map((r: any) => `${r.damage}|${r.damageType}|${r.category}`), ['1d10+4|piercing|null', '1d4|bleed|persistent'], 'damage rolls');
+      eq(jaws._source.system.attackEffects.value, ['grab'], 'attack effect');
+      ok(jaws._source.system.traits.value.includes('reach-10'), 'reach trait slug');
+      const thorn = strikes[1];
+      eq(thorn._source.system.range?.increment, 30, 'range increment');
+      eq(thorn.isRanged, true, 'thorn is ranged');
+      const pod = strikes[2];
+      ok(pod._source.system.traits.value.includes('thrown-20'), 'thrown trait slug');
+      eq(Object.keys(pod._source.system.damageRolls).length, 0, 'effect-only strike has no damage');
+      ok(String(pod._source.system.description?.value ?? '').includes('sickened 1'), 'effect text kept');
+    },
+  },
+  {
     name: 'compendium-ref NPC: Monster Core goblin + adventure notes overlay',
     run: (s) => {
       const a = actor(s, 'compendium-npc');
@@ -240,6 +293,19 @@ export const cases: TestCase[] = [
       ok(notes.includes('<h3>In this adventure</h3>') && notes.includes('ZENITH-OVERLAY-NPC'), 'overlay appended to publicNotes');
       eq(notes.split('ZENITH-OVERLAY-NPC').length - 1, 1, 'overlay appears exactly once');
       eq(a.getFlag('zenith-adventure-importer', 'slug'), 'compendium-npc', 'zenith flags kept');
+    },
+  },
+  {
+    name: 'compendium-ref variant: base creature with the variant numbers applied',
+    run: (s) => {
+      const a = actor(s, 'compendium-variant');
+      eq(a.type, 'npc', 'type');
+      eq(src(a, 'system.details.level.value'), 0, 'level override');
+      eq(src(a, 'system.traits.rarity'), 'unique', 'rarity override');
+      eq([src(a, 'system.attributes.hp.max'), src(a, 'system.attributes.ac.value'), src(a, 'system.perception.mod')], [20, 18, 7], 'hp/ac/perception overrides');
+      eq([src(a, 'system.saves.fortitude.value'), src(a, 'system.saves.reflex.value'), src(a, 'system.saves.will.value')], [6, 9, 4], 'save overrides');
+      eq(src(a, 'system.skills.athletics.base'), 9, 'skill override');
+      ok((a.items?.size ?? 0) > 0, "base creature's strikes kept");
     },
   },
   {

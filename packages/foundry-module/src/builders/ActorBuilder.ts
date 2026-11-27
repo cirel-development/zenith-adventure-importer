@@ -8,7 +8,18 @@ import type { AssetMap } from '../pipeline/AssetUploader.js';
 import type { EntityRegistry } from '../pipeline/EntityRegistry.js';
 import type { CompendiumLookup } from '../compendium/CompendiumLookup.js';
 import { log } from '../log.js';
-import { toPf2eHazardTraits, toPf2eLanguages, toPf2eSize } from './pf2eMappings.js';
+import {
+  isLoreSkill,
+  splitKnownDefenses,
+  toPf2eAttackEffects,
+  toPf2eDamageRolls,
+  toPf2eHazardTraits,
+  toPf2eLanguages,
+  toPf2eSenses,
+  toPf2eSize,
+  toPf2eSkillSlug,
+  toPf2eStrikeTraits,
+} from './pf2eMappings.js';
 
 /** Language slugs PF2e knows at runtime; undefined outside Foundry. */
 function pf2eLanguageSlugs(): string[] | undefined {
@@ -235,6 +246,9 @@ export class ActorBuilder {
       source['name'] = statBlock.name_override;
     }
 
+    // Variant numbers on top of the compendium base.
+    if (statBlock.overrides) this.applyOverrides(source, statBlock.overrides);
+
     // Adventure-specific text goes after the compendium's own text. NPCs keep
     // notes in details.publicNotes; PF2e hazards have no publicNotes, so for
     // them it goes in details.description (see buildPF2eHazardSystem).
@@ -260,6 +274,31 @@ export class ActorBuilder {
       };
     }
     return source;
+  }
+
+  /** Write a variant's numbers into a compendium NPC's source data (PF2e 8.x paths). */
+  private applyOverrides(
+    source: Record<string, unknown>,
+    o: NonNullable<Extract<StatBlock, { kind: 'compendium-ref' }>['overrides']>,
+  ): void {
+    const set = (path: string, value: unknown) => {
+      const keys = path.split('.');
+      let o = source as Record<string, any>;
+      for (const k of keys.slice(0, -1)) o = (o[k] ??= {}) as Record<string, any>;
+      o[keys[keys.length - 1]!] = value;
+    };
+    if (o.level !== undefined) set('system.details.level.value', o.level);
+    if (o.rarity) set('system.traits.rarity', o.rarity);
+    if (o.hp !== undefined) {
+      set('system.attributes.hp.max', o.hp);
+      set('system.attributes.hp.value', o.hp);
+    }
+    if (o.ac !== undefined) set('system.attributes.ac.value', o.ac);
+    if (o.perception !== undefined) set('system.perception.mod', o.perception);
+    if (o.saves) for (const k of ['fortitude', 'reflex', 'will'] as const) set(`system.saves.${k}.value`, o.saves[k]);
+    if (o.attributes) for (const [k, v] of Object.entries(o.attributes)) set(`system.abilities.${k}.mod`, v);
+    if (o.skills) for (const s of o.skills.filter((x) => !isLoreSkill(x.name))) set(`system.skills.${toPf2eSkillSlug(s.name)}.base`, s.bonus);
+    if (o.speed !== undefined) set('system.attributes.speed.value', o.speed);
   }
 
   // ----------------------------------------------------------------------------
@@ -323,13 +362,29 @@ export class ActorBuilder {
   private buildPF2eNpcSystem(
     sb: Extract<StatBlock, { kind: 'custom' }>,
   ): Record<string, unknown> {
+    const P = (CONFIG as any)?.PF2E ?? {};
+    const keys = (o: unknown) => (o ? Object.keys(o as object) : undefined);
+    const senses = toPf2eSenses(sb.senses, keys(P.senses));
+    const imm = splitKnownDefenses(sb.immunities.map((type) => ({ type })), keys(P.immunityTypes));
+    const weak = splitKnownDefenses(sb.weaknesses, keys(P.weaknessTypes));
+    const res = splitKnownDefenses(sb.resistances, keys(P.resistanceTypes));
+    const skillNotes = sb.skills.filter((s) => s.note && !isLoreSkill(s.name)).map((s) => `${s.name} +${s.bonus} (${s.note})`);
+    // Anything PF2e can't hold in a structured field is kept as text in the notes.
+    const leftovers = [
+      imm.unknownText && `Immunities: ${imm.unknownText}`,
+      weak.unknownText && `Weaknesses: ${weak.unknownText}`,
+      res.unknownText && `Resistances: ${res.unknownText}`,
+      skillNotes.length > 0 && `Skills: ${skillNotes.join(', ')}`,
+    ].filter(Boolean);
+    const notes = (sb.tactics_html ?? '') + (leftovers.length ? `<p>${leftovers.join('<br>')}</p>` : '');
+
     return {
       details: {
         level: { value: sb.level },
         alliance: 'opposition',
         creatureType: '',
         languages: toPf2eLanguages(sb.languages, pf2eLanguageSlugs()),
-        publicNotes: sb.tactics_html ?? '',
+        publicNotes: notes,
         privateNotes: '',
         ...(sb.alignment && sb.alignment !== 'no-alignment'
           ? { alignment: { value: sb.alignment } }
@@ -351,29 +406,31 @@ export class ActorBuilder {
       attributes: {
         hp: { value: sb.hp, max: sb.hp },
         ac: { value: sb.ac },
-        perception: { value: sb.perception },
         speed: {
           value: sb.speeds.land,
           otherSpeeds: this.buildOtherSpeeds(sb.speeds),
         },
-        immunities: sb.immunities.map((type) => ({ type })),
-        weaknesses: sb.weaknesses.map((w) => ({ type: w.type, value: w.value })),
-        resistances: sb.resistances.map((r) => ({ type: r.type, value: r.value })),
+        immunities: imm.kept,
+        weaknesses: weak.kept.map((w) => ({ type: w.type, value: w.value })),
+        resistances: res.kept.map((r) => ({ type: r.type, value: r.value })),
       },
       saves: {
         fortitude: { value: sb.saves.fortitude },
         reflex: { value: sb.saves.reflex },
         will: { value: sb.saves.will },
       },
-      // Skills are a record on PF2e NPCs, keyed by lowercase skill name
+      // Skills are a record on PF2e NPCs keyed by skill slug; lore skills are
+      // separate "lore" items (see buildPF2eEmbeddedItems).
       skills: Object.fromEntries(
-        sb.skills.map((s) => [
-          s.name.toLowerCase(),
-          { base: s.bonus, value: s.bonus },
-        ]),
+        sb.skills
+          .filter((s) => !isLoreSkill(s.name))
+          .map((s) => [toPf2eSkillSlug(s.name), { base: s.bonus }]),
       ),
+      // PF2e 8.x keeps Perception here (not attributes.perception).
       perception: {
-        senses: sb.senses.map((s) => ({ type: s })),
+        mod: sb.perception,
+        senses: senses.senses,
+        details: senses.details,
       },
     };
   }
@@ -449,27 +506,35 @@ export class ActorBuilder {
   ): unknown[] {
     const items: unknown[] = [];
 
-    // Strikes → "melee" type items in PF2e
+    // Strikes → "melee" type items in PF2e (ranged ones too: a range or a
+    // thrown-N trait makes PF2e treat them as ranged).
     for (const strike of sb.strikes) {
+      const { traits, range } = toPf2eStrikeTraits(strike.traits);
+      const rolls = toPf2eDamageRolls(strike.damage_formula);
+      const effectOnly = rolls.length === 0;
+      const effects = strike.effects ?? [];
+      const rangeValue =
+        range ??
+        (strike.range_feet ? { increment: strike.range_feet, max: null } : null) ??
+        (strike.type === 'ranged' && !traits.some((t) => t.startsWith('thrown')) ? { increment: null, max: null } : null);
       items.push({
         type: 'melee',
         name: strike.name,
         system: {
-          weaponType: { value: strike.type },
           bonus: { value: strike.attack_bonus },
-          // PF2e structures damage as a record keyed by a generated ID.
-          // We use stable keys derived from index for deterministic output.
-          damageRolls: {
-            primary: {
-              damage: strike.damage_formula.split(' ')[0] ?? '',
-              damageType: strike.damage_formula.split(' ').slice(1).join(' ') || 'piercing',
-            },
-          },
-          traits: { value: strike.traits },
-          ...(strike.range_feet ? { range: { value: strike.range_feet } } : {}),
-          ...(strike.reload ? { reload: { value: strike.reload } } : {}),
+          // PF2e keys damage rolls by an id; stable keys keep output deterministic.
+          damageRolls: Object.fromEntries(rolls.map((r, i) => [`zenith${i}`, r])),
+          attackEffects: { value: effectOnly ? [] : toPf2eAttackEffects(effects) },
+          traits: { value: [...traits, ...(strike.reload ? [`reload-${strike.reload}`] : [])] },
+          ...(rangeValue ? { range: rangeValue } : {}),
+          ...(effectOnly && effects.length ? { description: { value: `<p>${effects.join('; ')}</p>` } } : {}),
         },
       });
+    }
+
+    // Lore skills ("Farming Lore +5") are lore items on PF2e NPCs.
+    for (const skill of sb.skills.filter((s) => isLoreSkill(s.name))) {
+      items.push({ type: 'lore', name: skill.name, system: { mod: { value: skill.bonus } } });
     }
 
     // Abilities/actions → "action" type items

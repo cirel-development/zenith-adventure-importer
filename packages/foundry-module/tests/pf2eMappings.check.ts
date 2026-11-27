@@ -2,7 +2,19 @@
  * Offline check for contract -> PF2e slug mappings.
  * Run: pnpm --filter zenith-adventure-importer test:mappings
  */
-import { toPf2eHazardTraits, toPf2eLanguages, toPf2eSize } from '../src/builders/pf2eMappings.js';
+import {
+  isLoreSkill,
+  splitKnownDefenses,
+  toPf2eAttackEffects,
+  toPf2eDamageRolls,
+  toPf2eDefenseType,
+  toPf2eHazardTraits,
+  toPf2eLanguages,
+  toPf2eSenses,
+  toPf2eSize,
+  toPf2eSkillSlug,
+  toPf2eStrikeTraits,
+} from '../src/builders/pf2eMappings.js';
 
 // Subset of CONFIG.PF2E.languages keys observed in PF2e 8.7.1.
 const KNOWN = ['common', 'fey', 'sakvroth', 'chthonian', 'diabolic', 'empyrean', 'petran', 'pyric', 'thalassic', 'sussuran', 'draconic', 'elven'];
@@ -37,6 +49,27 @@ check('hazard drops header word', toPf2eHazardTraits(['hazard'], HAZARD_KNOWN), 
 check('hazard keeps valid, lowercases', toPf2eHazardTraits(['Mechanical', 'TRAP', 'hazard'], HAZARD_KNOWN), ['mechanical', 'trap']);
 check('hazard drops unknown', toPf2eHazardTraits(['environmental', 'spiky'], HAZARD_KNOWN), ['environmental']);
 check('hazard empty -> mechanical', toPf2eHazardTraits([]), ['mechanical']);
+
+const SENSES = ['darkvision', 'low-light-vision', 'scent', 'tremorsense', 'motion-sense'];
+check('senses', toPf2eSenses(['low-light vision', 'scent (imprecise) 30 feet', 'smoke vision'], SENSES), {
+  senses: [{ type: 'low-light-vision' }, { type: 'scent', acuity: 'imprecise', range: 30 }],
+  details: 'smoke vision',
+});
+check('defense alias', [toPf2eDefenseType('axes'), toPf2eDefenseType('Cold Iron'), toPf2eDefenseType('visual effects')], ['axe-vulnerability', 'cold-iron', 'visual']);
+check('defense split', splitKnownDefenses([{ type: 'fire', value: 5 }, { type: 'bramble', value: 2 }], ['fire']), { kept: [{ type: 'fire', value: 5 }], unknownText: 'bramble 2' });
+check('damage rolls', toPf2eDamageRolls('1d6+2 piercing plus 1d4 acid plus 1d4 persistent bleed'), [
+  { damage: '1d6+2', damageType: 'piercing', category: null },
+  { damage: '1d4', damageType: 'acid', category: null },
+  { damage: '1d4', damageType: 'bleed', category: 'persistent' },
+]);
+check('damage rolls empty', toPf2eDamageRolls(''), []);
+check('strike traits', toPf2eStrikeTraits(['agile', 'reach 10 feet', 'versatile S', 'deadly d10', 'thrown 20 feet', 'range increment 30 feet']), {
+  traits: ['agile', 'reach-10', 'versatile-s', 'deadly-d10', 'thrown-20'],
+  range: { increment: 30, max: null },
+});
+check('attack effects', toPf2eAttackEffects(['Grab', 'Improved Knockdown']), ['grab', 'improved-knockdown']);
+check('lore skill', [isLoreSkill('Farming Lore'), isLoreSkill('Athletics')], [true, false]);
+check('skill slugs', ['Arcane', 'Occult', 'Athletics'].map(toPf2eSkillSlug), ['arcana', 'occultism', 'athletics']);
 
 if (failures.length) {
   console.error(`\n${failures.length} mapping check(s) failed`);
