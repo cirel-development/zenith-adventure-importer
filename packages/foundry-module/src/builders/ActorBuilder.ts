@@ -299,6 +299,8 @@ export class ActorBuilder {
     if (o.attributes) for (const [k, v] of Object.entries(o.attributes)) set(`system.abilities.${k}.mod`, v);
     if (o.skills) for (const s of o.skills.filter((x) => !isLoreSkill(x.name))) set(`system.skills.${toPf2eSkillSlug(s.name)}.base`, s.bonus);
     if (o.speed !== undefined) set('system.attributes.speed.value', o.speed);
+    // PF2e applies Elite/Weak itself (level, AC, HP, saves, strikes).
+    if (o.adjustment) set('system.attributes.adjustment', o.adjustment);
   }
 
   // ----------------------------------------------------------------------------

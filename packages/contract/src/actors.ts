@@ -62,6 +62,8 @@ const CompendiumRefStatBlockSchema = z.object({
         .optional(),
       skills: z.array(z.object({ name: z.string(), bonus: z.number().int() })).optional(),
       speed: z.number().int().nonnegative().optional(),
+      // PF2e's Elite/Weak adjustment ("Weak Ghost Commoner"); PF2e applies it.
+      adjustment: z.enum(['elite', 'weak']).optional(),
     })
     .optional(),
 });

@@ -343,6 +343,19 @@ const actors: Bundle['actors']['entities'] = [
     ...META,
   },
   {
+    slug: 'compendium-weak',
+    name: 'Compendium Test — Weak Ghost Commoner',
+    category: 'creature',
+    folder: FOLDERS.actors,
+    stat_block: {
+      kind: 'compendium-ref',
+      uuid: requireUuid(INDEX.findCreature('Ghost Commoner')),
+      version_pin: `pf2e@${INDEX.version}`,
+      overrides: { adjustment: 'weak' },
+    },
+    ...META,
+  },
+  {
     slug: 'compendium-hazard',
     name: 'Compendium Test — Hidden Pit',
     category: 'hazard',

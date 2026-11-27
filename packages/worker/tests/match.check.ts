@@ -41,6 +41,13 @@ check('level off by 1 -> accept, review', [lv(0)?.match.pack, lv(0)?.reviewReaso
 check('level off by 3 -> custom', lv(2), null);
 check('no level -> accept, review', [lv(null)?.match.name, lv(null)?.reviewReasons.length], ['Goblin Warrior', 1]);
 
+// --- Elite/Weak prefixes: base creature + PF2e adjustment (Ghost Commoner is Monster Core L4).
+const weak = planActorMatches(idx, { title: 'Some Homebrew', npcs: [n('Weak Ghost Commoner', 3)], hazards: [] }).npcs[0];
+check('weak prefix -> base + adjustment', [weak?.match.name, weak?.adjustment, weak?.match.pack], ['Ghost Commoner', 'weak', 'pathfinder-monster-core']);
+const elite = planActorMatches(idx, { title: 'Some Homebrew', npcs: [n('Elite Ghost Commoner', 5)], hazards: [] }).npcs[0];
+check('elite prefix -> base + adjustment', [elite?.match.name, elite?.adjustment], ['Ghost Commoner', 'elite']);
+check('weak with wrong level -> custom', planActorMatches(idx, { title: 'x', npcs: [n('Weak Ghost Commoner', 9)], hazards: [] }).npcs[0], null);
+
 // --- Title-based adventure pack.
 const plague = planActorMatches(idx, { title: 'The Fall of Plaguestone', npcs: [], hazards: [] });
 check('Plaguestone pack from title', [plague.adventurePack, plague.adventurePackSource], ['fall-of-plaguestone-bestiary', 'title']);

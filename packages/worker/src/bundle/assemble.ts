@@ -284,6 +284,7 @@ export function assembleBundle(
       uuid: decision.match.uuid,
       ...(versionPin ? { version_pin: versionPin } : {}),
       notes_html: notesHtml,
+      ...(decision.adjustment ? { overrides: { adjustment: decision.adjustment } } : {}),
     },
     ai_metadata: {
       confidence: decision.confidence,

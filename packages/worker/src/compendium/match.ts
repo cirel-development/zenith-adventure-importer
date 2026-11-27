@@ -23,6 +23,8 @@ export interface ActorMatchDecision {
   reviewReasons: string[];
   /** 0.9 adventure pack, 0.8 exact level elsewhere, 0.6 flagged. */
   confidence: number;
+  /** "Weak Ghost Commoner" -> base Ghost Commoner with PF2e's weak adjustment. */
+  adjustment?: 'elite' | 'weak';
 }
 
 export interface ActorMatchPlan {
@@ -84,12 +86,32 @@ export function planActorMatches(
     return null;
   };
 
+  // "Weak Ghost Commoner" / "Elite Boar": match the base creature, compare the
+  // adjusted level (base -1 / +1), and let PF2e apply the adjustment.
+  const decideCreature = (name: string, level: number | null): ActorMatchDecision | null => {
+    const direct = decide(index.findCreature(name, { level, adventurePack }), level);
+    if (direct) return direct;
+    const adj = /^(weak|elite)\s+(.+)$/i.exec(name.trim());
+    if (!adj) return null;
+    const adjustment = adj[1]!.toLowerCase() as 'elite' | 'weak';
+    const delta = adjustment === 'elite' ? 1 : -1;
+    const base = index.findCreature(adj[2]!, { level: level === null ? null : level - delta, adventurePack });
+    if (!base) return null;
+    const adjusted = { ...base, level: base.level === null ? null : base.level + delta };
+    const d = decide(adjusted, level);
+    if (!d) return null;
+    return {
+      ...d,
+      match: base,
+      adjustment,
+      reviewReasons: [...d.reviewReasons, `${base.name} from ${base.packLabel} with PF2e's ${adjustment} adjustment applied.`],
+    };
+  };
+
   return {
     adventurePack,
     adventurePackSource,
-    npcs: extracted.npcs.map((n) =>
-      decide(index.findCreature(n.name, { level: n.level, adventurePack }), n.level),
-    ),
+    npcs: extracted.npcs.map((n) => decideCreature(n.name, n.level)),
     hazards: extracted.hazards.map((h) =>
       decide(index.findHazard(h.name, { level: h.level, adventurePack }), h.level),
     ),

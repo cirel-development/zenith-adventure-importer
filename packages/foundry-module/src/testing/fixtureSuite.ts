@@ -22,7 +22,7 @@ import { getAllImportRecords, getImportRecord, type ImportRecord } from '../sett
 /** Served by Foundry from <Data>/zenith-fixtures/ (setup.ps1 copies it there). */
 export const FIXTURE_PATH = 'zenith-fixtures/test-bundle.zip';
 const FIXTURE_ADVENTURE_SLUG = 'test-bundle-2a';
-const EXPECTED_ACTORS = 20; // 16 custom + 1 parsed + 3 compendium-ref
+const EXPECTED_ACTORS = 21; // 16 custom + 1 parsed + 4 compendium-ref
 const EXPECTED_ENTITIES = 4 /* folders */ + 1 /* journal */ + 1 /* item */ + EXPECTED_ACTORS;
 
 export interface SuiteState {
@@ -306,6 +306,15 @@ export const cases: TestCase[] = [
       eq([src(a, 'system.saves.fortitude.value'), src(a, 'system.saves.reflex.value'), src(a, 'system.saves.will.value')], [6, 9, 4], 'save overrides');
       eq(src(a, 'system.skills.athletics.base'), 9, 'skill override');
       ok((a.items?.size ?? 0) > 0, "base creature's strikes kept");
+    },
+  },
+  {
+    name: 'compendium-ref weak: PF2e applies the Weak adjustment',
+    run: (s) => {
+      const a = actor(s, 'compendium-weak');
+      eq(src(a, 'system.attributes.adjustment'), 'weak', 'adjustment stored');
+      eq(a.isWeak, true, 'PF2e treats it as weak');
+      eq(a.level, 3, 'level is base 4 - 1');
     },
   },
   {
