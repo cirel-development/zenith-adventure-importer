@@ -34,3 +34,6 @@ foundrydata/
 package-lock.json
 yarn.lock
 PATCH-README.md
+
+# Downloaded PF2e release data for building the compendium index
+packages/worker/.cache/

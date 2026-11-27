@@ -9,6 +9,7 @@ import { extractPdf } from './pdf/extract.js';
 import { AiClient } from './ai/client.js';
 import { extractAdventure } from './pipeline/extractAdventure.js';
 import { assembleBundle, validateAndZip } from './bundle/assemble.js';
+import { runAssemble, runPrepare } from './sim.js';
 
 // ============================================================================
 // Arg parsing — simple, no external dependency
@@ -18,6 +19,7 @@ interface ParsedArgs {
   command: string;
   input?: string;
   output?: string;
+  extraction?: string;
   yes: boolean;
   help: boolean;
 }
@@ -37,6 +39,8 @@ function parseArgs(argv: string[]): ParsedArgs {
       out.output = args[++i];
     } else if (a === '--input' || a === '-i') {
       out.input = args[++i];
+    } else if (a === '--extraction' || a === '-e') {
+      out.extraction = args[++i];
     } else if (a === '--yes' || a === '-y') {
       out.yes = true;
     } else if (a === '--help' || a === '-h') {
@@ -54,8 +58,15 @@ function printUsage(): void {
 
 Usage:
   zenith-worker process <input.pdf> [--output bundle.zip] [--yes]
+  zenith-worker prepare <input.pdf> [--output <dir>]          (no API call)
+  zenith-worker assemble <input.pdf> --extraction <file.json> [--output bundle.zip]
+
+  prepare + assemble simulate "process" without the API: prepare writes the
+  exact prompt, text and tool schema; a stand-in model writes extraction.json;
+  assemble validates it and builds the bundle with the production code.
 
 Options:
+  --extraction, -e  Tool-call JSON for "assemble"
   --output, -o  Output zip path (default: <input>.bundle.zip)
   --yes,    -y  Skip the cost confirmation prompt
   --help,   -h  Show this message
@@ -219,6 +230,14 @@ async function main(): Promise<void> {
   switch (args.command) {
     case 'process':
       await runProcess(args);
+      break;
+    case 'prepare':
+      if (!args.input) throw new Error('prepare: missing input PDF path');
+      await runPrepare(args.input, args.output);
+      break;
+    case 'assemble':
+      if (!args.input || !args.extraction) throw new Error('assemble: need <input.pdf> and --extraction <file.json>');
+      await runAssemble(args.input, args.extraction, args.output);
       break;
     default:
       console.error(`Unknown command: ${args.command}`);

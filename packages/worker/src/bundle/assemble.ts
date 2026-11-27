@@ -311,7 +311,8 @@ export function assembleBundle(
         size: 'medium',
         rarity: 'common',
         alignment: 'no-alignment',
-        traits: ['hazard'],
+        // "hazard" is the stat-block header word, not a PF2e trait (PF2e drops it).
+        traits: haz.traits.map((t) => t.trim().toLowerCase()).filter((t) => t && t !== 'hazard'),
         languages: [],
         hp: Math.max(10, 10 + (haz.level ?? 0) * 5),
         ac: 10 + (haz.level ?? 0),

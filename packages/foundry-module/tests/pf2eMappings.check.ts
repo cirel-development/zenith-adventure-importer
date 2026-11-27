@@ -2,7 +2,7 @@
  * Offline check for contract -> PF2e slug mappings.
  * Run: pnpm --filter zenith-adventure-importer test:mappings
  */
-import { toPf2eLanguages, toPf2eSize } from '../src/builders/pf2eMappings.js';
+import { toPf2eHazardTraits, toPf2eLanguages, toPf2eSize } from '../src/builders/pf2eMappings.js';
 
 // Subset of CONFIG.PF2E.languages keys observed in PF2e 8.7.1.
 const KNOWN = ['common', 'fey', 'sakvroth', 'chthonian', 'diabolic', 'empyrean', 'petran', 'pyric', 'thalassic', 'sussuran', 'draconic', 'elven'];
@@ -31,6 +31,12 @@ check('languages all legacy', toPf2eLanguages(['Abyssal', 'Infernal', 'Celestial
 check('languages dedupe', toPf2eLanguages(['Fey', 'Sylvan', 'common', 'Common']).value, ['fey', 'common']);
 check('languages unknown -> details', toPf2eLanguages(['Common', "Thieves' Cant", 'Gnoll'], KNOWN), { value: ['common'], details: "Thieves' Cant, Gnoll" });
 check('languages blank skipped', toPf2eLanguages(['', '  ', 'Draconic'], KNOWN), { value: ['draconic'], details: '' });
+
+const HAZARD_KNOWN = ['mechanical', 'trap', 'environmental', 'magical', 'haunt'];
+check('hazard drops header word', toPf2eHazardTraits(['hazard'], HAZARD_KNOWN), ['mechanical']);
+check('hazard keeps valid, lowercases', toPf2eHazardTraits(['Mechanical', 'TRAP', 'hazard'], HAZARD_KNOWN), ['mechanical', 'trap']);
+check('hazard drops unknown', toPf2eHazardTraits(['environmental', 'spiky'], HAZARD_KNOWN), ['environmental']);
+check('hazard empty -> mechanical', toPf2eHazardTraits([]), ['mechanical']);
 
 if (failures.length) {
   console.error(`\n${failures.length} mapping check(s) failed`);

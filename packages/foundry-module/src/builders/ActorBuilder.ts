@@ -8,12 +8,18 @@ import type { AssetMap } from '../pipeline/AssetUploader.js';
 import type { EntityRegistry } from '../pipeline/EntityRegistry.js';
 import type { CompendiumLookup } from '../compendium/CompendiumLookup.js';
 import { log } from '../log.js';
-import { toPf2eLanguages, toPf2eSize } from './pf2eMappings.js';
+import { toPf2eHazardTraits, toPf2eLanguages, toPf2eSize } from './pf2eMappings.js';
 
 /** Language slugs PF2e knows at runtime; undefined outside Foundry. */
 function pf2eLanguageSlugs(): string[] | undefined {
   const langs = (CONFIG as any)?.PF2E?.languages;
   return langs ? Object.keys(langs) : undefined;
+}
+
+/** Hazard trait slugs PF2e keeps at runtime; undefined outside Foundry. */
+function pf2eHazardTraitSlugs(): string[] | undefined {
+  const traits = (CONFIG as any)?.PF2E?.hazardTraits;
+  return traits ? Object.keys(traits) : undefined;
 }
 
 declare const Actor: { create(data: unknown): Promise<ActorDoc> };
@@ -383,7 +389,7 @@ export class ActorBuilder {
         routine: '', // routine on-trigger text; left empty in Phase 2A
       },
       traits: {
-        value: sb.traits.length > 0 ? sb.traits : ['mechanical'],
+        value: toPf2eHazardTraits(sb.traits, pf2eHazardTraitSlugs()),
         rarity: sb.rarity,
         // Hazards have an `otherTags` field rather than a size field
         otherTags: [],

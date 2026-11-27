@@ -12,8 +12,12 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/cli.ts",
     "process": "tsx src/cli.ts process",
+    "prepare:sim": "tsx src/cli.ts prepare",
+    "assemble:sim": "tsx src/cli.ts assemble",
     "test:bundle": "tsx tests/build-test-bundle.ts",
-    "test:chapters": "tsx tests/assemble-chapters.check.ts"
+    "test:chapters": "tsx tests/assemble-chapters.check.ts",
+    "build:index": "tsx scripts/build-compendium-index.ts",
+    "test:index": "tsx tests/compendium-index.check.ts"
   },
   "dependencies": {
     "@ai-adventure/contract": "workspace:*",

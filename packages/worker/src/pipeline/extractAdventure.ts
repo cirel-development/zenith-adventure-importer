@@ -71,6 +71,8 @@ const HazardDataZ = z.object({
    * parse it into structured fields.
    */
   mechanics: z.string().optional(),
+  /** Trait line under the HAZARD header, lowercase, e.g. ['mechanical', 'trap']. */
+  traits: z.array(z.string()).default([]),
   /** Which chapter this hazard appears in. Null = adventure-wide. */
   chapter_slug: ChapterAssignmentZ,
 });
@@ -131,7 +133,7 @@ export type ExtractedAdventure = z.infer<typeof ExtractedAdventureZ>;
 // a library (zod-to-json-schema) but for Phase 1 it's clearer to write by
 // hand. The two need to stay in sync — when we add fields, update both.
 
-const EXTRACT_TOOL_SCHEMA = {
+export const EXTRACT_TOOL_SCHEMA = {
   type: 'object',
   properties: {
     title: { type: 'string', description: 'Adventure title' },
@@ -307,6 +309,13 @@ const EXTRACT_TOOL_SCHEMA = {
               'Trigger ..., Effect ..., Reset ...). Preserve numbers and structure ' +
               'exactly as printed.',
           },
+          traits: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Lowercase traits from the trait line under the "HAZARD N" header, e.g. ' +
+              '"MECHANICAL TRAP" -> ["mechanical", "trap"]. Never include "hazard" itself.',
+          },
           chapter_slug: {
             type: ['string', 'null'],
             description:
@@ -349,7 +358,7 @@ const EXTRACT_TOOL_SCHEMA = {
 // The actual extraction call
 // ============================================================================
 
-const SYSTEM_PROMPT = `You are an expert assistant that extracts structured information from tabletop RPG adventure PDFs.
+export const SYSTEM_PROMPT = `You are an expert assistant that extracts structured information from tabletop RPG adventure PDFs.
 
 Your job is to read the adventure text and call the \`extract_adventure\` tool with structured data about the adventure's contents.
 
@@ -379,6 +388,7 @@ NPCS AND CREATURES (the \`npcs\` array)
 HAZARDS (the \`hazards\` array)
 - Extract every hazard or trap with a mechanical stat block. Paizo formats these as "HAZARD X" headers with Stealth DC, Disable, AC, saves, Trigger, Effect, Reset.
 - The \`mechanics\` field gets the verbatim mechanics block — preserve DCs, damage formulas, save types exactly.
+- \`traits\`: the lowercase trait line under the "HAZARD N" header (e.g. "MECHANICAL TRAP" → ['mechanical', 'trap']). "hazard" itself is not a trait.
 
 ITEMS (the \`items\` array)
 - Extract items that are specifically named or have mechanical importance. Skip mundane gear like torches.
@@ -400,6 +410,27 @@ DO NOT use inline syntax inside read_aloud text — that's verbatim Paizo prose 
 
 You must call the \`extract_adventure\` tool exactly once. The text provided may be the entire adventure or a chunk of it — extract whatever is present.`;
 
+export const EXTRACT_TOOL_NAME = 'extract_adventure';
+export const EXTRACT_TOOL_DESCRIPTION =
+  'Submit the structured representation of the adventure extracted from the source text.';
+
+/** The exact text the API receives as the user message for this PDF. */
+export function buildUserMessage(pdf: ExtractedPdf): string {
+  return USER_MESSAGE_TEMPLATE(pdf.pages.join('\n\n').trim());
+}
+
+/**
+ * Validate tool-call output (from the API or a simulated extraction) with the
+ * same Zod schema, applying defaults. Throws with the Zod message on failure.
+ */
+export function parseExtraction(data: unknown, source = 'Claude'): ExtractedAdventure {
+  const parsed = ExtractedAdventureZ.safeParse(data);
+  if (!parsed.success) {
+    throw new Error(`${source} returned data that failed Zod validation:\n${parsed.error.message}`);
+  }
+  return parsed.data;
+}
+
 const USER_MESSAGE_TEMPLATE = (text: string): string => {
   return `Here is the adventure text. Call the \`extract_adventure\` tool with structured data extracted from it.
 
@@ -414,30 +445,20 @@ export async function extractAdventure(
 ): Promise<{ adventure: ExtractedAdventure; usage: { inputTokens: number; outputTokens: number; estimatedCost: number } }> {
   // Concatenate all pages into one blob. Page boundaries don't carry semantic
   // value for the AI; what matters is the running text.
-  const fullText = pdf.pages.join('\n\n').trim();
-
   const result = await client.generateStructured<unknown>({
     system: SYSTEM_PROMPT,
-    userMessage: USER_MESSAGE_TEMPLATE(fullText),
+    userMessage: buildUserMessage(pdf),
     tool: {
-      name: 'extract_adventure',
-      description:
-        'Submit the structured representation of the adventure extracted from the source text.',
+      name: EXTRACT_TOOL_NAME,
+      description: EXTRACT_TOOL_DESCRIPTION,
       input_schema: EXTRACT_TOOL_SCHEMA as unknown as Record<string, unknown>,
     },
   });
 
   // Validate against Zod — the API enforces JSON Schema but Zod adds defaults
   // and gives us better runtime types.
-  const parsed = ExtractedAdventureZ.safeParse(result.data);
-  if (!parsed.success) {
-    throw new Error(
-      `Claude returned data that failed Zod validation:\n${parsed.error.message}`,
-    );
-  }
-
   return {
-    adventure: parsed.data,
+    adventure: parseExtraction(result.data),
     usage: result.usage,
   };
 }

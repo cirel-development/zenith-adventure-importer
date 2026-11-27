@@ -3,6 +3,9 @@ import { registerSettings } from './settings.js';
 import { buildImportDialog } from './apps/ImportDialog.js';
 import { log } from './log.js';
 import { selfTest, registerQuench } from './testing/fixtureSuite.js';
+import { Importer } from './pipeline/Importer.js';
+import { UndoHandler } from './apps/UndoHandler.js';
+import { getImportRecord } from './settings.js';
 
 // ============================================================================
 // Init: register settings before world is ready
@@ -28,6 +31,18 @@ Hooks.once('ready', () => {
       openImportDialog,
       /** Imports zenith-fixtures/test-bundle.zip, checks every fixture, undoes it. */
       selfTest,
+      /** Scripted import (same pipeline as the dialog's URL mode). GM only. */
+      importBundle: async (url: string) => {
+        if (!game.user.isGM) throw new Error('GM only');
+        return new Importer().run({ kind: 'url', value: url });
+      },
+      /** Undo one import by bundle id (same as the dialog's Undo button). GM only. */
+      undoImport: async (bundleId: string) => {
+        if (!game.user.isGM) throw new Error('GM only');
+        const record = getImportRecord(bundleId);
+        if (!record) throw new Error(`no import record for ${bundleId}`);
+        return new UndoHandler().undo(record);
+      },
     };
   }
 });
