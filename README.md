@@ -7,7 +7,7 @@ Tooling for importing AI-processed adventure PDFs into Foundry VTT.
 | Package | Description |
 |---|---|
 | [`packages/contract`](./packages/contract) | Wire-format schemas (Zod). Shared between the worker that produces bundles and the Foundry module that consumes them. |
-| [`packages/foundry-module`](./packages/foundry-module) | Foundry VTT v13 module that imports adventure bundles. |
+| [`packages/foundry-module`](./packages/foundry-module) | Foundry VTT v14 module (PF2e 8.7.x) that imports adventure bundles. |
 
 Future additions: `worker/` (Vultr-side PDF processing pipeline), `web/` (Cloudflare-side SaaS frontend).
 
@@ -30,13 +30,13 @@ The sample command produces `packages/foundry-module/samples/the-haunted-mill.zi
 
 ## Module installation
 
-For end users, the module is installed via Foundry's module manager. After the first release tag, paste this manifest URL into Foundry → Add-on Modules → Install Module:
+For end users, the module is installed via Foundry's module manager. Paste this manifest URL into Foundry → Add-on Modules → Install Module:
 
 ```
-https://github.com/<your-org>/zenith-adventure-importer/releases/latest/download/module.json
+https://github.com/cirel-development/zenith-adventure-importer/releases/latest/download/module.json
 ```
 
-Until the first release, manual install instructions live in [`packages/foundry-module/README.md`](./packages/foundry-module/README.md).
+Since v0.2.0 the module requires Foundry v14 (PF2e 8.7.x). Foundry v13 users should stay on v0.1.10. See [CHANGELOG.md](./CHANGELOG.md).
 
 ## Releasing
 

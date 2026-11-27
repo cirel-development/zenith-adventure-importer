@@ -19,6 +19,7 @@ if (arg === 'major') next = `${major + 1}.0.0`;
 else if (arg === 'minor') next = `${major}.${minor + 1}.0`;
 else next = `${major}.${minor}.${patch + 1}`;
 
+const previous = pkg.version;
 pkg.version = next;
 writeFileSync(PKG_PATH, JSON.stringify(pkg, null, 2) + '\n');
 
@@ -26,4 +27,4 @@ const mod = JSON.parse(readFileSync(MOD_PATH, 'utf8'));
 mod.version = next;
 writeFileSync(MOD_PATH, JSON.stringify(mod, null, 2) + '\n');
 
-console.log(`bumped ${pkg.version} → ${next}`);
+console.log(`bumped ${previous} -> ${next}`);

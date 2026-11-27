@@ -1,6 +1,6 @@
 # Zenith Adventure Importer
 
-Foundry VTT v13 module that imports adventure bundles produced by the Zenith Adventure web service. PF2e and D&D 5e supported via the bundle's declared system.
+Foundry VTT v14 module (PF2e 8.7.x) that imports adventure bundles produced by the Zenith Adventure web service. PF2e and D&D 5e supported via the bundle's declared system. Foundry v13 users: stay on module v0.1.10.
 
 **Pass 2 complete — all six builders implemented.** Manage Imports dialog still pending (use settings clear for now).
 
@@ -12,8 +12,10 @@ Foundry VTT v13 module that imports adventure bundles produced by the Zenith Adv
 - Folder hierarchy (topological build order)
 - Multi-page journal entries with per-page permissions
 - Items (compendium-ref, compendium-ref-with-runes, custom)
-- Actors (compendium-ref, custom NPCs/creatures, loot containers)
-- Scenes with v13 walls, lights, ambient sounds, map notes
+- Actors (compendium-ref with notes overlay and variant overrides, custom NPCs/creatures with
+  real stats from parsed stat blocks, loot containers), mapped to PF2e 8.x fields
+- Scenes with walls, lights, ambient sounds, map notes (written for v13; not yet re-tested on v14)
+- In-Foundry self-test: `await game.modules.get('zenith-adventure-importer').api.selfTest()`
 - Empty playlist scaffolding
 - Cross-reference resolution (`[[REF:type:slug]]` → `@UUID[]`)
 - Map note pinning (clicking a pin opens the right journal page)
