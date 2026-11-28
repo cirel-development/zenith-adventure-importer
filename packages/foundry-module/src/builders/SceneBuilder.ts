@@ -62,13 +62,18 @@ export class SceneBuilder {
     const padding = entry.dimensions.padding;
 
     // Foundry's `padding` adds extra canvas space around the playable area.
-    // The background image sits in the playable area, which starts at
-    // (padding * width, padding * height) on the canvas — NOT at (0, 0).
+    // The background image sits in the playable area, which starts at the
+    // padding offset on the canvas — NOT at (0, 0).
     // Our normalized 0..1 coordinates from the contract describe positions
     // relative to the image, so we add the offset to align walls/lights/etc
     // with the actual image, not the upper-left of the padded canvas.
-    const offsetX = width * padding;
-    const offsetY = height * padding;
+    // Foundry rounds the padding UP to whole grid cells (BaseGrid
+    // calculateDimensions: ceil(padding * size / grid) * grid), so use the
+    // same offset; width * padding alone is off by up to a cell whenever it
+    // isn't a whole number of cells (e.g. 4200 * 0.25 = 1050 -> 1100).
+    const cell = entry.grid.size;
+    const offsetX = Math.ceil(padding * width * (1 / cell)) * cell;
+    const offsetY = Math.ceil(padding * height * (1 / cell)) * cell;
 
     // Convert all normalized coordinates to scene-pixel coordinates.
     const walls = entry.walls.map((w) => this.buildWall(w, width, height, offsetX, offsetY));

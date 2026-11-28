@@ -68,6 +68,7 @@ export function mergeVariant(base: ParsedStatBlock, variant: ParsedStatBlock): P
     ac: pick(variant.ac, base.ac),
     saves: pick(variant.saves, base.saves),
     hp: pick(variant.hp, base.hp),
+    hpAbilities: listOr(variant.hpAbilities, base.hpAbilities),
     immunities: listOr(variant.immunities, base.immunities),
     weaknesses: listOr(variant.weaknesses, base.weaknesses),
     resistances: listOr(variant.resistances, base.resistances),
@@ -183,6 +184,67 @@ export function inventoryResolver(idx: CompendiumIndex): ItemResolver {
   };
 }
 
+/** Ability name -> PF2e Bestiary Ability Glossary UUID ("Grab", "Trample"). */
+export type GlossaryResolver = (name: string) => string | null;
+
+export function glossaryResolver(idx: CompendiumIndex): GlossaryResolver {
+  return (name) => idx.findGlossaryAbility(name)?.uuid ?? null;
+}
+
+/** Strike effects that are standard glossary actions, with their usual cost. */
+const EFFECT_ACTIONS: Record<string, CustomStatBlock['actions'][number]['cost']> = {
+  grab: '1', 'improved grab': 'free', knockdown: '1', 'improved knockdown': 'free',
+  push: '1', 'improved push': 'free', pull: '1', constrict: '1', 'greater constrict': '1',
+};
+
+/**
+ * Link printed abilities to PF2e's glossary (the module copies the glossary
+ * item, so PF2e's slug and rules come along), and add the standard actions a
+ * stat block implies without listing them as abilities: Regeneration / Fast
+ * Healing printed after HP, and Grab/Knockdown/Push named in a Strike's
+ * damage. An action with an empty description takes the glossary's text and
+ * action cost as they are.
+ */
+function linkGlossaryAbilities(actions: CustomStatBlock['actions'], p: ParsedStatBlock, resolve: GlossaryResolver): void {
+  for (const a of actions) {
+    const uuid = resolve(a.name);
+    if (uuid) a.source_uuid = uuid;
+  }
+  const have = new Set(actions.map((a) => normalizeName(a.name.replace(/\s*(?:\d+.*|\(.*\))$/, ''))));
+  for (const h of p.hpAbilities) {
+    const base = h.kind === 'regeneration' ? 'Regeneration' : 'Fast Healing';
+    const uuid = resolve(base);
+    if (!uuid || have.has(normalizeName(base))) continue;
+    actions.push({
+      // PF2e's own naming: "Regeneration 10 (Deactivated by Fire)".
+      name: `${base} ${h.value}${h.note ? ` (${titleCase(h.note).replace(/\s(By|Or|And|Of|The|While|In|On)\b/g, (w) => w.toLowerCase())})` : ''}`,
+      cost: 'passive',
+      traits: [],
+      category: 'defensive',
+      description_html: '',
+      source_uuid: uuid,
+    });
+    have.add(normalizeName(base));
+  }
+  // Senses PF2e also attaches as glossary actions ("Tremorsense (Imprecise)
+  // 60 feet"); Telepathy prints in the languages line.
+  for (const sense of [...p.senses, ...p.languages]) {
+    const m = /^(tremorsense|telepathy|all-around vision|lifesense|wavesense|thoughtsense)\b/i.exec(sense.trim());
+    const uuid = m ? resolve(m[1]!) : null;
+    if (!uuid || have.has(normalizeName(m![1]!))) continue;
+    actions.push({ name: titleCase(sense.trim()), cost: 'passive', traits: [], category: 'interaction', description_html: '', source_uuid: uuid });
+    have.add(normalizeName(m![1]!));
+  }
+  for (const effect of p.strikes.flatMap((s) => s.effects)) {
+    const key = effect.toLowerCase();
+    const cost = EFFECT_ACTIONS[key];
+    const uuid = cost ? resolve(effect) : null;
+    if (!uuid || have.has(normalizeName(effect))) continue;
+    actions.push({ name: titleCase(key), cost: cost!, traits: [], category: 'offensive', description_html: '', source_uuid: uuid });
+    have.add(normalizeName(effect));
+  }
+}
+
 /** Spell names in a custom stat block that have no compendium UUID. */
 export function unresolvedSpells(sb: CustomStatBlock): string[] {
   return sb.spellcasting.flatMap((e) => Object.values(e.spells).flat().filter((s) => !s.uuid).map((s) => s.name));
@@ -197,6 +259,7 @@ export function toCustomStatBlock(
   notesHtml: string,
   resolveSpell?: SpellResolver,
   resolveItem?: ItemResolver,
+  resolveGlossary?: GlossaryResolver,
 ): CustomStatBlock {
   const lvl = p.level;
   // Printed items that match the compendium become inventory; the rest (and
@@ -225,6 +288,7 @@ export function toCustomStatBlock(
     if (rest) unparsed.push(rest);
     for (const a of abilities) actions.push({ ...toAction(a), category });
   }
+  if (resolveGlossary) linkGlossaryAbilities(actions, p, resolveGlossary);
   const abilityText = unparsed.join(' ');
   return {
     kind: 'custom',

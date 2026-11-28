@@ -12,6 +12,8 @@ import { assembleBundle, validateAndZip } from './bundle/assemble.js';
 import { printMatchSummary, runAssemble, runPrepare } from './sim.js';
 import { CompendiumIndex } from './compendium/index.js';
 import { collectFallbackCandidates, runFallback } from './statblock/ai-fallback.js';
+import { findMapCandidates, runMapVision } from './maps/pipeline.js';
+import type { MapCandidate } from './maps/scenes.js';
 
 // ============================================================================
 // Arg parsing — simple, no external dependency
@@ -25,6 +27,7 @@ interface ParsedArgs {
   fallback?: string;
   fallbackThreshold?: number;
   noCompendium?: boolean;
+  noMaps?: boolean;
   yes: boolean;
   help: boolean;
 }
@@ -52,6 +55,8 @@ function parseArgs(argv: string[]): ParsedArgs {
       out.fallbackThreshold = Number(args[++i]);
     } else if (a === '--no-compendium') {
       out.noCompendium = true;
+    } else if (a === '--no-maps') {
+      out.noMaps = true;
     } else if (a === '--yes' || a === '-y') {
       out.yes = true;
     } else if (a === '--help' || a === '-h') {
@@ -80,6 +85,7 @@ Options:
   --extraction, -e  Tool-call JSON for "assemble"
   --fallback        Stand-in model's answer to the stat-block fallback request ("assemble")
   --fallback-threshold  Parse confidence below which a block goes to the fallback (default 0.7)
+  --no-maps     Skip battle-map scenes (no image extraction or vision calls)
   --output, -o  Output zip path (default: <input>.bundle.zip)
   --yes,    -y  Skip the cost confirmation prompt
   --help,   -h  Show this message
@@ -223,15 +229,35 @@ async function runProcess(args: ParsedArgs): Promise<void> {
     console.log(`      Fallback: ${fb.batches} request(s), $${fb.cost.toFixed(4)}`);
   }
 
+  // Phase 3: battle maps -> one vision call per image with a grid.
+  let maps: MapCandidate[] = [];
+  let visionTokens = { input: 0, output: 0 };
+  if (!args.noMaps) {
+    const mapCandidates = await findMapCandidates(pdfBytes);
+    if (mapCandidates.length) {
+      const locations = adventure.chapters.flatMap((c) => c.locations.map((l) => ({ area_code: l.area_code ?? null, name: l.name, chapter: c.name })));
+      const mv = await runMapVision(ai, mapCandidates, pdf.pages, locations);
+      maps = mv.maps;
+      visionTokens = { input: mv.inputTokens, output: mv.outputTokens };
+      console.log(`      Map vision: ${mapCandidates.length} image(s), $${mv.cost.toFixed(4)}`);
+    }
+  }
+
+  const assets = new Map<string, Uint8Array>();
   const bundle = assembleBundle(adventure, {
     pdfBytes,
-    aiTokens: { input: usage.inputTokens + fallbackTokens.input, output: usage.outputTokens + fallbackTokens.output },
+    aiTokens: {
+      input: usage.inputTokens + fallbackTokens.input + visionTokens.input,
+      output: usage.outputTokens + fallbackTokens.output + visionTokens.output,
+    },
     compendium,
     pdfText,
     statBlockFixes,
+    maps,
+    assetsOut: assets,
   });
   printMatchSummary(bundle);
-  const { zip, warnings } = validateAndZip(bundle);
+  const { zip, warnings } = validateAndZip(bundle, assets);
   await writeFile(outputPath, zip);
   const step4Ms = Math.round(performance.now() - step4Start);
 
@@ -274,6 +300,7 @@ async function main(): Promise<void> {
         fallbackPath: args.fallback,
         fallbackThreshold: args.fallbackThreshold,
         noCompendium: args.noCompendium,
+        noMaps: args.noMaps,
       });
       break;
     default:

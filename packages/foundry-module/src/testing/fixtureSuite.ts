@@ -308,7 +308,7 @@ export const cases: TestCase[] = [
       const a = actor(s, 'parsed-full');
       const acts = a.items.filter((i: any) => i.type === 'action');
       const by = (n: string) => acts.find((i: any) => i.name === n);
-      eq(acts.map((i: any) => i.name).sort(), ['Bramble Hound Aura', 'Seed Burst', 'Thorn Rebuke'], 'action names');
+      eq(acts.map((i: any) => i.name).sort(), ['Bramble Hound Aura', 'Grab', 'Regeneration 5 (Deactivated by Fire)', 'Seed Burst', 'Thorn Rebuke', 'Trample'], 'action names');
       eq([by('Bramble Hound Aura')._source.system.actionType.value, by('Bramble Hound Aura')._source.system.category], ['passive', 'interaction'], 'passive aura');
       eq([by('Thorn Rebuke')._source.system.actionType.value, by('Thorn Rebuke')._source.system.category], ['reaction', 'defensive'], 'reaction');
       const burst = by('Seed Burst');
@@ -317,6 +317,23 @@ export const cases: TestCase[] = [
       eq([burst._source.system.frequency?.max, burst._source.system.frequency?.per], [1, 'round'], 'structured frequency');
       ok(String(burst._source.system.description.value).includes('<strong>Effect</strong>'), 'description kept');
       ok(includes(by('Bramble Hound Aura')._source.system.traits.value, 'aura'), 'aura trait kept');
+    },
+  },
+  {
+    name: 'parsed abilities: glossary abilities keep PF2e slug, rules and text',
+    run: (s) => {
+      const a = actor(s, 'parsed-full');
+      const by = (n: string) => a.items.find((i: any) => i.type === 'action' && i.name === n);
+      const grab = by('Grab');
+      eq([grab?._source.system.slug, grab?._source._stats?.compendiumSource?.includes('bestiary-ability-glossary-srd')], ['grab', true], 'Grab is the glossary item');
+      const regen = by('Regeneration 5 (Deactivated by Fire)');
+      const rule = (regen?._source.system.rules ?? []).find((r: any) => r.key === 'FastHealing');
+      eq([rule?.type, rule?.value, rule?.deactivatedBy], ['regeneration', 5, ['fire']], 'regeneration rule set from the printed numbers');
+      const trample = by('Trample');
+      eq([trample?._source.system.actionType.value, trample?._source.system.actions.value], ['action', 3], 'printed cost kept');
+      const desc = String(trample?._source.system.description.value ?? '');
+      ok(desc.startsWith('<p>Medium or smaller') && /<hr\s*\/?>/.test(desc) && desc.includes('Glossary.Trample'), 'printed specifics, then the glossary text');
+      ok(!desc.includes('[Size]'), 'glossary template line replaced by the printed one');
     },
   },
   {
@@ -454,6 +471,11 @@ export const cases: TestCase[] = [
       ok(String(level?.background?.src ?? '').endsWith('maps/test-map.png'), 'map on the scene level');
       eq(sc._source.initialLevel, level?.id, 'initial level set');
       eq([sc.walls.size, sc.walls.filter((w: any) => w.door).length, sc.lights.size, sc.sounds.size], [2, 1, 1, 1], 'walls/door/light/sound');
+      // 1000 px wide at 25% padding is 250 px, which Foundry rounds up to 300;
+      // the wall at normalized x 0.1 must land 100 px inside the map.
+      const rect = sc.dimensions.sceneRect;
+      const wall = sc.walls.find((w: any) => !w.door);
+      eq([rect.x, rect.y, wall?.c[0], wall?.c[1]], [300, 200, rect.x + 100, rect.y + 80], 'walls placed relative to the rounded padding');
       const note = sc.notes.contents[0];
       eq([note?.entry?.name, note?.page?.flags?.['zenith-adventure-importer']?.slug], ['Bug Test Bundle — Overview', 'how-to-use'], 'note opens the overview page');
       eq(note?.flags?.['zenith-adventure-importer']?.unresolvedJournalRef ?? null, null, 'temporary ref flag cleared');

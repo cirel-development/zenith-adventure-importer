@@ -77,7 +77,7 @@ export function itemNameForms(name: string): string[] {
     for (let k = 1; k < words.length; k++) exact(`${words.slice(k).join(' ')} (${words.slice(0, k).join(' ')})`);
   }
   // "Studded Leather" -> "Studded Leather Armor".
-  if (!/armor$/i.test(name)) exact(`${name} Armor`);
+  if (!/\barmor$/i.test(name)) exact(`${name} Armor`);
   return out;
 }
 

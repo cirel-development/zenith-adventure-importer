@@ -164,6 +164,16 @@ export class CompendiumIndex {
     return this.best(name, (e) => this.packs[e[2]]!.name === 'equipment-srd', {});
   }
 
+  /**
+   * A standard creature ability from PF2e's Bestiary Ability Glossary
+   * ("Grab", "Trample", "Regeneration"). A trailing value or note is ignored:
+   * "Regeneration 10 (deactivated by fire)" -> Regeneration.
+   */
+  findGlossaryAbility(name: string): CompendiumMatch | null {
+    const accept = (e: IndexEntry) => this.packs[e[2]]!.name === 'bestiary-ability-glossary-srd';
+    return this.best(name, accept, {}) ?? this.best(name.replace(/\s*(?:\d+.*|\(.*\))$/, ''), accept, {});
+  }
+
   findSpell(name: string): CompendiumMatch | null {
     return this.best(name, (e) => this.packs[e[2]]!.name === 'spells-srd', {});
   }

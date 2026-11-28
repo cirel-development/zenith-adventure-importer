@@ -4,7 +4,7 @@
  */
 
 /** Item packs to index, by system.json pack NAME (not folder). */
-export const ITEM_PACKS = ['equipment-srd', 'spells-srd', 'feats-srd', 'conditionitems'];
+export const ITEM_PACKS = ['equipment-srd', 'spells-srd', 'feats-srd', 'conditionitems', 'bestiary-ability-glossary-srd'];
 
 export const INDEX_ENTRY_FIELDS = ['name', 'id', 'pack', 'type', 'level', 'rarity'] as const;
 

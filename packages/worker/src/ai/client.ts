@@ -48,7 +48,18 @@ export class AiClient {
     system: string;
     userMessage: string;
     tool: ToolSpec;
+    /** Images sent before the text (Phase 3 map vision). */
+    images?: { mediaType: 'image/jpeg' | 'image/png' | 'image/webp'; data: Uint8Array }[];
   }): Promise<AiResult<T>> {
+    const content: Anthropic.MessageParam['content'] = opts.images?.length
+      ? [
+          ...opts.images.map((img) => ({
+            type: 'image' as const,
+            source: { type: 'base64' as const, media_type: img.mediaType, data: Buffer.from(img.data).toString('base64') },
+          })),
+          { type: 'text' as const, text: opts.userMessage },
+        ]
+      : opts.userMessage;
     const response = await this.client.messages.create({
       model: this.config.model,
       max_tokens: this.config.maxOutputTokens,
@@ -56,7 +67,7 @@ export class AiClient {
       messages: [
         {
           role: 'user',
-          content: opts.userMessage,
+          content,
         },
       ],
       tools: [

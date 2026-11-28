@@ -40,6 +40,8 @@ export interface ParsedStatBlock {
   ac: number | null;
   saves: { fortitude: number; reflex: number; will: number } | null;
   hp: number | null;
+  /** Printed after HP: "regeneration 10 (deactivated by fire)", "fast healing 5". */
+  hpAbilities: { kind: 'regeneration' | 'fast healing'; value: number; note?: string }[];
   immunities: string[];
   weaknesses: { type: string; value: number }[];
   resistances: { type: string; value: number }[];
@@ -291,6 +293,11 @@ export function parseStatBlock(scanned: ScannedBlock): ParseResult {
 
   const hpSeg = segment(body, labels, 'HP');
   const hpM = hpSeg ? /^(\d+)/.exec(hpSeg) : null;
+  const hpAbilities: ParsedStatBlock['hpAbilities'] = [...(hpSeg ?? '').matchAll(/\b(regeneration|fast healing)\s(\d+)(?:\s\(([^)]*)\))?/gi)].map((m) => ({
+    kind: m[1]!.toLowerCase() as 'regeneration' | 'fast healing',
+    value: Number(m[2]),
+    ...(m[3] ? { note: m[3].trim() } : {}),
+  }));
   // Reactions/auras printed between the defenses and Speed ("Ferocity
   // [reaction]", "Bristle [reaction] Trigger ..."): from the first
   // Capitalized word after the last defense list (lists are lowercase).
@@ -325,6 +332,7 @@ export function parseStatBlock(scanned: ScannedBlock): ParseResult {
     ac: num(acM?.[1]),
     saves: savesM ? { fortitude: Number(savesM[1]), reflex: Number(savesM[2]), will: Number(savesM[3]) } : null,
     hp: num(hpM?.[1]),
+    hpAbilities,
     immunities: parseImmunities(segment(body, labels, 'Immunities')),
     weaknesses: parseResistLike(segment(body, labels, 'Weaknesses')),
     resistances: parseResistLike(segment(body, labels, 'Resistances')),

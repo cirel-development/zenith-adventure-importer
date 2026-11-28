@@ -27,13 +27,17 @@
     "test:abilities": "tsx tests/abilities.check.ts",
     "test:hazards": "tsx tests/hazards.check.ts",
     "test:spells": "tsx tests/spells.check.ts",
-    "test:fallback": "tsx tests/fallback.check.ts"
+    "test:fallback": "tsx tests/fallback.check.ts",
+    "test:grid": "tsx tests/grid.check.ts",
+    "list:maps": "tsx scripts/list-maps.ts",
+    "test:scenes": "tsx tests/scenes.check.ts"
   },
   "dependencies": {
     "@ai-adventure/contract": "workspace:*",
     "@anthropic-ai/sdk": "^0.30.1",
     "dotenv": "^16.4.5",
     "fflate": "^0.8.2",
+    "jpeg-js": "^0.4.4",
     "pdfjs-dist": "^4.7.76",
     "zod": "^3.22.0"
   },

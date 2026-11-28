@@ -375,6 +375,25 @@ const actors: Bundle['actors']['entities'] = [
           category: 'offensive',
           description_html: '<p><strong>Frequency</strong> once per round</p><p><strong>Effect</strong> Seeds burst in a 10-foot emanation (DC 19 basic Reflex save).</p>',
         },
+        // Glossary-linked (PF2e's Bestiary Ability Glossary): an empty
+        // description takes the glossary item as is; a printed one goes first.
+        { name: 'Grab', cost: '1', traits: [], category: 'offensive', description_html: '', source_uuid: requireUuid(INDEX.findGlossaryAbility('Grab')) },
+        {
+          name: 'Regeneration 5 (Deactivated by Fire)',
+          cost: 'passive',
+          traits: [],
+          category: 'defensive',
+          description_html: '',
+          source_uuid: requireUuid(INDEX.findGlossaryAbility('Regeneration')),
+        },
+        {
+          name: 'Trample',
+          cost: '3',
+          traits: [],
+          category: 'offensive',
+          description_html: '<p>Medium or smaller, jaws, DC 19</p>',
+          source_uuid: requireUuid(INDEX.findGlossaryAbility('Trample')),
+        },
       ],
       // Printed gear (v0.2.2): runes, quantity + note, material, plain armor.
       inventory: [

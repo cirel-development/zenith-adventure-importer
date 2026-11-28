@@ -363,7 +363,7 @@ export class ActorBuilder {
       return {
         type: 'hazard',
         system: this.buildPF2eHazardSystem(statBlock),
-        items: this.buildPF2eEmbeddedItems(statBlock, assetMap),
+        items: await this.buildPF2eEmbeddedItems(statBlock, assetMap),
       };
     }
 
@@ -371,7 +371,7 @@ export class ActorBuilder {
     // any other category all share the NPC sheet — that matches what Paizo
     // does (creatures and NPCs are both `type: 'npc'` in their data files).
     const system = this.buildPF2eNpcSystem(statBlock);
-    const items = this.buildPF2eEmbeddedItems(statBlock, assetMap);
+    const items = await this.buildPF2eEmbeddedItems(statBlock, assetMap);
     items.push(...(await this.buildSpellcastingItems(statBlock)));
     items.push(...(await this.buildInventoryItems(statBlock)));
     const focus = statBlock.spellcasting.reduce((n, e) => n + (e.focus_points ?? 0), 0);
@@ -556,10 +556,10 @@ export class ActorBuilder {
    * Build embedded item documents for strikes, actions, and inventory.
    * On PF2e NPCs, strikes and abilities ARE Items embedded in the actor.
    */
-  private buildPF2eEmbeddedItems(
+  private async buildPF2eEmbeddedItems(
     sb: Extract<StatBlock, { kind: 'custom' }>,
     _assetMap: AssetMap,
-  ): unknown[] {
+  ): Promise<unknown[]> {
     const items: unknown[] = [];
 
     // Strikes → "melee" type items in PF2e (ranged ones too: a range or a
@@ -603,18 +603,59 @@ export class ActorBuilder {
       // An unknown `per` makes Foundry drop the whole item, so check it.
       const parsedFrequency = toPf2eFrequency(ability.frequency);
       const frequency = parsedFrequency && (!frequencies || frequencies.has(parsedFrequency.per)) ? parsedFrequency : null;
-      items.push({
-        type: 'action',
-        name: ability.name,
-        system: {
-          actionType: { value: this.mapActionType(ability.cost) },
-          actions: { value: this.mapActionCount(ability.cost) },
-          traits: { value: actionTraits ? ability.traits.filter((t) => actionTraits.has(t)) : ability.traits },
-          ...(ability.category ? { category: ability.category } : {}),
-          description: { value: ability.description_html },
-          ...(frequency ? { frequency } : {}),
-        },
-      });
+      const own = {
+        actionType: { value: this.mapActionType(ability.cost) },
+        actions: { value: this.mapActionCount(ability.cost) },
+        traits: { value: actionTraits ? ability.traits.filter((t) => actionTraits.has(t)) : ability.traits },
+        ...(ability.category ? { category: ability.category } : {}),
+        description: { value: ability.description_html },
+        ...(frequency ? { frequency } : {}),
+      };
+
+      // Standard abilities (Grab, Trample, Regeneration ...) start from PF2e's
+      // glossary item so its slug and rules come along, as on PF2e's own
+      // creatures: printed specifics first, then the glossary text.
+      const glossary = ability.source_uuid ? await this.compendium.resolveSource(ability.source_uuid) : null;
+      if (glossary && glossary.source['type'] === 'action') {
+        const src = glossary.source as Record<string, any>;
+        const sys = (src['system'] ??= {}) as Record<string, any>;
+        let glossaryText = String(sys['description']?.value ?? '');
+        const printed = ability.description_html.trim();
+        // Some glossary entries open with a template line PF2e's own creatures
+        // fill in ("[Size], [Listed Strike], @Check[reflex|dc:|basic]");
+        // printed specifics replace it.
+        const firstRule = glossaryText.search(/<hr\s*\/?>/);
+        if (printed && firstRule > 0 && /\[[A-Z][^\]]*\]/.test(glossaryText.slice(0, firstRule)))
+          glossaryText = glossaryText.slice(firstRule).replace(/^<hr\s*\/?>\s*/, '');
+        src['name'] = ability.name;
+        if (printed) {
+          // The printed glyph is authoritative ("Trample [three-actions]").
+          sys['actionType'] = own.actionType;
+          sys['actions'] = own.actions;
+          sys['description'] = { value: `${printed}${glossaryText ? `\n<hr />\n${glossaryText}` : ''}` };
+          const traits = new Set<string>([...(sys['traits']?.value ?? []), ...own.traits.value]);
+          sys['traits'] = { ...(sys['traits'] ?? {}), value: [...traits] };
+          if (frequency) sys['frequency'] = frequency;
+        }
+        if (ability.category) sys['category'] = ability.category;
+        // "Regeneration 10 (Deactivated by Fire)" / "Fast Healing 5": the rule's numbers.
+        const value = /\s(\d+)\b/.exec(ability.name);
+        const deactivated = /deactivated by ([^)]+)\)/i.exec(ability.name);
+        if (Array.isArray(sys['rules']))
+          sys['rules'] = sys['rules'].map((r: any) =>
+            r?.key === 'FastHealing'
+              ? {
+                  ...r,
+                  ...(value ? { value: Number(value[1]) } : {}),
+                  ...(r.type === 'regeneration' && deactivated ? { deactivatedBy: deactivated[1]!.toLowerCase().split(/\s*(?:,|\bor\b|\band\b)\s*/).filter(Boolean) } : {}),
+                }
+              : r,
+          );
+        src['_stats'] = { ...(src['_stats'] ?? {}), compendiumSource: glossary.resolvedUuid };
+        items.push(src);
+        continue;
+      }
+      items.push({ type: 'action', name: ability.name, system: own });
     }
 
     return items;

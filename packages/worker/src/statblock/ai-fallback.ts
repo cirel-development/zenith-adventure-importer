@@ -257,6 +257,7 @@ export function parseFallbackAnswer(data: unknown): Map<string, ParsedStatBlock>
         ac: b.ac,
         saves: b.saves,
         hp: b.hp,
+        hpAbilities: [],
         immunities: b.immunities,
         weaknesses: b.weaknesses,
         resistances: b.resistances,

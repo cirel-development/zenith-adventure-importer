@@ -11,7 +11,8 @@ import { planActorMatches, type ActorMatchDecision } from '../compendium/match.j
 import { planItem, type ItemPlan } from '../compendium/items.js';
 import { scanStatBlocks } from '../statblock/scan.js';
 import { parseHazardBlock } from '../statblock/hazard.js';
-import { indexBlocks, indexHazardBlocks, nameKeys, toCustomHazard, inventoryResolver, linkStatBlock, spellResolver, toCustomStatBlock, unresolvedSpells } from '../statblock/link.js';
+import { buildScenes, type LocationRef, type MapCandidate } from '../maps/scenes.js';
+import { glossaryResolver, indexBlocks, indexHazardBlocks, nameKeys, toCustomHazard, inventoryResolver, linkStatBlock, spellResolver, toCustomStatBlock, unresolvedSpells } from '../statblock/link.js';
 import { scoreParsed, type ParsedStatBlock } from '../statblock/parse.js';
 import { normalizeName } from '../compendium/index.js';
 
@@ -73,6 +74,13 @@ export interface AssembleOptions {
    * could not read with confidence.
    */
   statBlockFixes?: Map<string, ParsedStatBlock>;
+  /**
+   * Phase 3: battle-map candidates from the PDF (images with a detected grid)
+   * and their vision answers. Each becomes one or more scenes.
+   */
+  maps?: MapCandidate[];
+  /** Filled with the scenes' image assets (bundle path -> bytes) for validateAndZip. */
+  assetsOut?: Map<string, Uint8Array>;
 }
 
 export function assembleBundle(
@@ -221,6 +229,8 @@ export function assembleBundle(
   // One journal per chapter, with chapter summary as the first page and one
   // page per location. Note: PermissionLevelSchema is 'none' | 'limited' |
   // 'observer' | 'owner'. We use 'none' for GM-only content.
+  /** Location pages by area code, for map pins (maps/scenes.ts). */
+  const locationRefs: LocationRef[] = [];
   extracted.chapters.forEach((chapter, idx) => {
     const journalSlug = slugs.next(`ch-${idx + 1}-${chapter.name}`);
 
@@ -248,6 +258,13 @@ export function assembleBundle(
       }
       content.push(`<p>${escapeHtml(location.description)}</p>`);
 
+      locationRefs.push({
+        area_code: location.area_code ?? null,
+        name: location.name,
+        journalSlug,
+        pageSlug,
+        chapterSlug: chapter.slug,
+      });
       pages.push({
         page_type: 'text',
         slug: pageSlug,
@@ -284,6 +301,7 @@ export function assembleBundle(
   const spellIdx = opts.spellIndex ?? opts.compendium;
   const resolveSpell = spellIdx ? spellResolver(spellIdx) : undefined;
   const resolveItem = spellIdx ? inventoryResolver(spellIdx) : undefined;
+  const resolveGlossary = spellIdx ? glossaryResolver(spellIdx) : undefined;
 
   const compendiumActor = (
     base: { slug: string; name: string; category: Bundle['actors']['entities'][number]['category']; folder: string },
@@ -363,7 +381,7 @@ export function assembleBundle(
       if (scanned.form === 'variant' && !linked.base && scanned.variantOf)
         reasons.push(`Variant of ${scanned.variantOf.name} (${scanned.variantOf.source}); fields the variant doesn't list are placeholders.`);
       if (parse.confidence < 0.7) reasons.push(`Low parse confidence (${parse.confidence}).`);
-      const statBlock = toCustomStatBlock(parse.block, notesHtml, resolveSpell, resolveItem);
+      const statBlock = toCustomStatBlock(parse.block, notesHtml, resolveSpell, resolveItem, resolveGlossary);
       const missingSpells = unresolvedSpells(statBlock);
       if (missingSpells.length)
         reasons.push(`Spells not found in the PF2e compendium (listed on the spellcasting entry, not castable): ${missingSpells.join(', ')}.`);
@@ -582,11 +600,29 @@ export function assembleBundle(
   const compendiumItemCount = items.filter((i) => i.data.kind !== 'custom').length;
 
   // ----- Scenes -----
-  // Phase 1 doesn't extract map images, and the contract requires every scene
-  // to have a background asset. So we create zero scenes. The Foundry module's
-  // SceneBuilder simply iterates an empty list. Phase 2 adds image extraction
-  // and proper scene creation.
-  const scenes: Bundle['scenes']['entities'] = [];
+  // Phase 3: battle maps found in the PDF (maps/scenes.ts). Scene folders are
+  // only created when there are scenes, mirroring the other types: one
+  // top-level folder, Overview, and the chapters that have maps.
+  const scenesPath = `${adventureSlug}-scenes`;
+  const sceneFolderFor = (chapterSlug: string | null): string => {
+    const known = chapterSlug ? chapterSlugMap.get(chapterSlug) ?? chapterSlugMap.get(slugify(chapterSlug)) : undefined;
+    return `${scenesPath}/${known ? `${known}-scene` : 'overview-scene'}`;
+  };
+  const sceneBuild = opts.maps?.length
+    ? buildScenes(opts.maps, { slug: (s) => slugs.next(s), folderFor: sceneFolderFor, locations: locationRefs })
+    : null;
+  const scenes: Bundle['scenes']['entities'] = sceneBuild?.scenes ?? [];
+  if (sceneBuild) for (const [path, bytes] of sceneBuild.assets) opts.assetsOut?.set(path, bytes);
+  if (scenes.length) {
+    const used = new Set(scenes.map((s) => s.folder));
+    folders.push({ slug: scenesPath, name: extracted.title, parent_path: null, type: 'scene', sort: 0 });
+    if (used.has(`${scenesPath}/overview-scene`))
+      folders.push({ slug: 'overview-scene', name: 'Overview', parent_path: scenesPath, type: 'scene', sort: 0 });
+    chapterFolderSlugs.forEach((chapter, idx) => {
+      if (used.has(`${scenesPath}/${chapter.slug}-scene`))
+        folders.push({ slug: `${chapter.slug}-scene`, name: chapter.name, parent_path: scenesPath, type: 'scene', sort: idx + 1 });
+    });
+  }
 
   // ----- Playlists -----
   // Two per chapter (ambience + combat) plus one adventure-wide. The
@@ -681,8 +717,11 @@ export function assembleBundle(
         : []),
       {
         kind: 'partial_extraction',
-        message:
-          'Phase 1 extraction: no scenes were created. Maps must be added manually after import.',
+        message: scenes.length
+          ? `${scenes.length} scene${scenes.length === 1 ? '' : 's'} built from the PDF's battle maps; check walls, doors and pins before play.${
+              sceneBuild?.warnings.length ? ` ${sceneBuild.warnings.join(' ')}` : ''
+            }`
+          : 'No battle maps with a grid were found in the PDF. Maps must be added manually after import.',
       },
     ],
   };
@@ -749,7 +788,7 @@ export interface AssemblyResult {
   warnings: string[];
 }
 
-export function validateAndZip(bundle: Bundle): AssemblyResult {
+export function validateAndZip(bundle: Bundle, assets?: Map<string, Uint8Array>): AssemblyResult {
   const validation = validateBundle(bundle);
   if (!validation.valid) {
     const errors = validation.issues
@@ -773,6 +812,8 @@ export function validateAndZip(bundle: Bundle): AssemblyResult {
     'entities/items.json': strToU8(JSON.stringify(bundle.items, null, 2)),
     'entities/scenes.json': strToU8(JSON.stringify(bundle.scenes, null, 2)),
     'entities/playlists.json': strToU8(JSON.stringify(bundle.playlists, null, 2)),
+    // Scene maps and other images, stored as-is (JPEG is already compressed).
+    ...Object.fromEntries([...(assets ?? [])].map(([path, bytes]) => [path, [bytes, { level: 0 }] as [Uint8Array, { level: 0 }]])),
   });
 
   return { bundle, zip, warnings };

@@ -6,7 +6,8 @@
  * Sample text is invented (no published text in the repo).
  */
 import { abilityDescriptionHtml, parseAbilities } from '../src/statblock/abilities.js';
-import { toCustomStatBlock } from '../src/statblock/link.js';
+import { glossaryResolver, toCustomStatBlock } from '../src/statblock/link.js';
+import { CompendiumIndex } from '../src/compendium/index.js';
 import { scoreParsed, type ParsedStatBlock } from '../src/statblock/parse.js';
 
 const failures: string[] = [];
@@ -100,6 +101,7 @@ const parsedBase = (over: Partial<ParsedStatBlock> = {}): ParsedStatBlock => ({
   ac: 18,
   saves: { fortitude: 9, reflex: 6, will: 5 },
   hp: 45,
+  hpAbilities: [],
   immunities: [],
   weaknesses: [],
   resistances: [],
@@ -134,6 +136,32 @@ check('unparsed leading text stays in Abilities paragraph', [sbRest.tactics_html
 // --- scoreParsed troop exemption ----------------------------------------------
 check('troop without strikes: no strikes missing', scoreParsed(parsedBase({ traits: ['troop'], strikes: [] })).missing.includes('strikes'), false);
 check('non-troop without strikes: strikes missing', scoreParsed(parsedBase({ traits: ['animal'], strikes: [] })).missing.includes('strikes'), true);
+
+// --- Glossary linking (PF2e's Bestiary Ability Glossary) ----------------------
+const gidx = CompendiumIndex.load();
+const GLOSSARY = 'Compendium.pf2e.bestiary-ability-glossary-srd.Item.';
+const glossed = toCustomStatBlock(
+  parsedBase({
+    hpAbilities: [{ kind: 'regeneration', value: 10, note: 'deactivated by fire' }],
+    senses: ['darkvision', 'tremorsense (imprecise) 30 feet'],
+    languages: ['Common', 'telepathy 100 feet'],
+    strikes: [{ kind: 'melee', name: 'tusk', bonus: 12, traits: [], damage: [{ formula: '2d8+6', type: 'piercing', persistent: false }], effects: ['Grab', 'Knockdown'], effectOnly: false }],
+    abilitiesText: 'Trample [three-actions] Medium or smaller, tusk, DC 21 (page 233) Gore Rush [two-actions] The boar charges.',
+  }),
+  '',
+  undefined,
+  undefined,
+  glossaryResolver(gidx),
+);
+const g = (n: string) => glossed.actions.find((a) => a.name === n);
+check('glossary: printed Trample linked, text kept', [g('Trample')?.source_uuid?.startsWith(GLOSSARY), g('Trample')?.cost, !!g('Trample')?.description_html], [true, '3', true]);
+check('glossary: own ability stays unlinked', g('Gore Rush')?.source_uuid, undefined);
+check('glossary: regeneration from the HP line', [g('Regeneration 10 (Deactivated by Fire)')?.source_uuid?.startsWith(GLOSSARY), g('Regeneration 10 (Deactivated by Fire)')?.category], [true, 'defensive']);
+check('glossary: strike effects become actions', [g('Grab')?.cost, g('Knockdown')?.cost, g('Grab')?.description_html], ['1', '1', '']);
+check('glossary: tremorsense and telepathy from senses/languages', [!!g('Tremorsense (imprecise) 30 Feet')?.source_uuid || !!glossed.actions.find((a) => /^Tremorsense/.test(a.name))?.source_uuid, !!glossed.actions.find((a) => /^Telepathy/.test(a.name))?.source_uuid], [true, true]);
+check('glossary: darkvision stays a sense only', glossed.actions.some((a) => /darkvision/i.test(a.name)), false);
+check('glossary: no duplicate Grab when printed', toCustomStatBlock(parsedBase({ strikes: [{ kind: 'melee', name: 'jaws', bonus: 9, traits: [], damage: [], effects: ['Grab'], effectOnly: false }], abilitiesText: 'Grab [one-action] Requirement The boar hit. Effect It grabs.' }), '', undefined, undefined, glossaryResolver(gidx)).actions.filter((a) => a.name === 'Grab').length, 1);
+check('glossary: lookup strips values', gidx.findGlossaryAbility('Fast Healing 2 (while touching metal)')?.name, 'Fast Healing');
 
 if (failures.length) {
   console.error(`\n${failures.length} ability check(s) failed: ${failures.join('; ')}`);

@@ -41,6 +41,11 @@ import {
   type FallbackCandidate,
 } from './statblock/ai-fallback.js';
 import type { ParsedStatBlock } from './statblock/parse.js';
+import { existsSync } from 'node:fs';
+import type { ExtractedAdventure } from './pipeline/extractAdventure.js';
+import { findMapCandidates, scaleAnswer, visionRequestFor } from './maps/pipeline.js';
+import { parseVisionAnswer, VISION_SYSTEM, VISION_TOOL_NAME, VISION_TOOL_SCHEMA } from './maps/vision.js';
+import type { MapCandidate } from './maps/scenes.js';
 
 /** MAX_OUTPUT_TOKENS without requiring an API key (sim runs have none). */
 function loadMaxOutputTokens(): number {
@@ -115,6 +120,72 @@ export interface AssembleSimOptions {
   fallbackThreshold?: number;
   /** Testing: skip compendium matching so every NPC goes through the parser. */
   noCompendium?: boolean;
+  /** Skip the map step (no scenes). */
+  noMaps?: boolean;
+}
+
+/**
+ * Simulated map vision: same requests as production (maps/pipeline.ts), on
+ * disk. Answers present in `dir` are used; missing ones are requested.
+ */
+async function simulateMapVision(
+  pdfBytes: Uint8Array,
+  pages: string[],
+  adventure: ExtractedAdventure,
+  dir: string,
+): Promise<MapCandidate[]> {
+  const candidates = await findMapCandidates(pdfBytes);
+  if (!candidates.length) {
+    console.log('Maps: no images with a grid found.');
+    return [];
+  }
+  const locations = adventure.chapters.flatMap((c) => c.locations.map((l) => ({ area_code: l.area_code ?? null, name: l.name, chapter: c.name })));
+  await mkdir(dir, { recursive: true });
+  const out: MapCandidate[] = [];
+  const missing: string[] = [];
+  for (const cand of candidates) {
+    const req = visionRequestFor(cand, pages, locations);
+    const answerPath = join(dir, `${req.imageId}.vision.json`);
+    if (existsSync(answerPath)) {
+      const answer = parseVisionAnswer(JSON.parse(await readFile(answerPath, 'utf8')));
+      out.push({ ...cand, vision: scaleAnswer(answer, req.scale) });
+      continue;
+    }
+    await writeFile(join(dir, `${req.imageId}.jpg`), req.jpeg);
+    await writeFile(join(dir, `${req.imageId}.request.md`), req.message, 'utf8');
+    missing.push(req.imageId);
+    out.push(cand);
+  }
+  console.log(
+    `Maps: ${candidates.length} image(s) with a grid: ${candidates.map((c) => `${c.image.id} p${c.image.page} ${c.image.width}x${c.image.height} cell ${c.grid.cellPx.toFixed(1)}px`).join('; ')}`,
+  );
+  if (missing.length) {
+    await writeFile(join(dir, 'vision-system-prompt.md'), VISION_SYSTEM, 'utf8');
+    await writeFile(
+      join(dir, 'vision-tool-schema.json'),
+      JSON.stringify({ name: VISION_TOOL_NAME, description: 'Submit the battle maps found in the image.', input_schema: VISION_TOOL_SCHEMA }, null, 2),
+      'utf8',
+    );
+    await writeFile(
+      join(dir, 'MAPS-INSTRUCTIONS.md'),
+      `# Simulated map vision
+
+You are standing in for the production vision model, once per image.
+For each <id> listed below:
+
+1. Look at <id>.jpg (the image exactly as the model receives it).
+2. Read <id>.request.md (the user turn: grid, locations, nearby text) and
+   follow vision-system-prompt.md.
+3. Write the \`${VISION_TOOL_NAME}\` tool input (schema: vision-tool-schema.json)
+   to <id>.vision.json. Coordinates are pixels of <id>.jpg.
+
+Images: ${missing.join(', ')}
+`,
+      'utf8',
+    );
+    console.log(`  ${missing.length} without a vision answer -> map-only scenes; requests written to ${dir} (MAPS-INSTRUCTIONS.md). Rerun assemble after answering.`);
+  }
+  return out;
 }
 
 /**
@@ -178,9 +249,15 @@ export async function runAssemble(inputPdf: string, extractionPath: string, outp
     }
   }
 
-  const bundle = assembleBundle(adventure, { pdfBytes, compendium, pdfText, statBlockFixes });
+  // Phase 3 maps: images with a grid; a stand-in model's vision answer per
+  // image in maps/<id>.vision.json. Without an answer the request is written
+  // for it and the image becomes a map-only scene.
+  const maps = simOpts.noMaps ? [] : await simulateMapVision(pdfBytes, pdf.pages, adventure, join(dirname(resolve(extractionPath)), 'maps'));
+  const assets = new Map<string, Uint8Array>();
+  const bundle = assembleBundle(adventure, { pdfBytes, compendium, pdfText, statBlockFixes, maps, assetsOut: assets });
   printMatchSummary(bundle);
-  const { zip, warnings } = validateAndZip(bundle);
+  for (const s of bundle.scenes.entities) console.log(`  scene     ${s.name.padEnd(26)} ${s.dimensions.width / 100}x${s.dimensions.height / 100} cells, ${s.walls.length} walls, ${s.lights.length} lights, ${s.notes.length} pins`);
+  const { zip, warnings } = validateAndZip(bundle, assets);
   await writeFile(outputPath, zip);
 
   const locations = adventure.chapters.reduce((n, c) => n + c.locations.length, 0);
