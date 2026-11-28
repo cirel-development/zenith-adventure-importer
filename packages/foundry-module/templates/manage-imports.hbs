@@ -1,0 +1,36 @@
+<div class="zenith-manage-imports">
+  {{#if imports.length}}
+    <p class="zenith-intro">
+      Every adventure imported into this world. <strong>Undo</strong> deletes what an import created;
+      <strong>Forget</strong> only removes it from this list.
+    </p>
+    <ul class="zenith-import-list">
+      {{#each imports}}
+        <li class="zenith-import-row{{#if stale}} zenith-import-stale{{/if}}" data-bundle-id="{{bundleId}}">
+          <div class="zenith-import-info">
+            <strong class="zenith-import-title">{{title}}</strong>
+            <span class="zenith-import-meta" title="{{importedAtFull}}">{{importedAt}} · {{counts}}</span>
+            {{#if stale}}
+              <span class="zenith-import-warning"><i class="fas fa-ghost"></i> Already deleted by hand</span>
+            {{else if partial}}
+              <span class="zenith-import-warning"><i class="fas fa-triangle-exclamation"></i> {{present}} of {{total}} documents still exist</span>
+            {{/if}}
+            <code class="zenith-import-id">{{bundleId}}</code>
+          </div>
+          <div class="zenith-import-actions">
+            {{#unless stale}}
+              <button type="button" class="zenith-button-undo" data-action="undoImport" data-bundle-id="{{bundleId}}">
+                <i class="fas fa-undo"></i> Undo
+              </button>
+            {{/unless}}
+            <button type="button" class="zenith-button-secondary" data-action="forgetImport" data-bundle-id="{{bundleId}}">
+              <i class="fas fa-eraser"></i> Forget
+            </button>
+          </div>
+        </li>
+      {{/each}}
+    </ul>
+  {{else}}
+    <p class="zenith-intro">No adventures have been imported into this world yet.</p>
+  {{/if}}
+</div>

@@ -2,7 +2,7 @@
 
 Foundry VTT v14 module (PF2e 8.7.x) that imports adventure bundles produced by the Zenith Adventure web service. PF2e and D&D 5e supported via the bundle's declared system. Foundry v13 users: stay on module v0.1.10.
 
-**Pass 2 complete — all six builders implemented.** Manage Imports dialog still pending (use settings clear for now).
+**Pass 2 complete — all six builders implemented.** Past imports can be browsed, undone or forgotten from Module Settings → Manage Imports.
 
 ## What works
 
@@ -26,12 +26,12 @@ Foundry VTT v14 module (PF2e 8.7.x) that imports adventure bundles produced by t
 - Map note pinning (clicking a pin opens the right journal page)
 - Compendium UUID resolution with cache
 - PF2e rune application for magic weapons/armor
-- Per-bundle undo (deletes everything created during the import)
+- Per-bundle undo (deletes everything created during the import), from the import dialog or
+  Module Settings → Manage Imports, which also lists every import and can forget stale records
 - Failed imports auto-rollback any partial state
 
 ## Still pending
 
-- Manage Imports dialog (browse and undo previous imports from a UI)
 - Asset cleanup on undo (Foundry's FilePicker has no delete API; manual for now)
 - D&D 5e custom-actor builder (compendium-ref works for both systems; custom NPCs are PF2e-flavored)
 
@@ -200,6 +200,4 @@ scripts/                     verify-build.mjs, bump-version.mjs
 
 ## Open issues
 
-- `bringToFront` may still warn on older v13 builds — track Foundry release notes
 - Asset cleanup on undo is best-effort (Foundry's FilePicker has no delete API)
-- No "Manage Imports" dialog yet — undo today requires clearing settings manually

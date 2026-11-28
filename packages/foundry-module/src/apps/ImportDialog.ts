@@ -3,6 +3,8 @@ import { Importer, type ImportSource } from '../pipeline/Importer.js';
 import { ProgressDialog } from './ProgressDialog.js';
 import { UndoHandler } from './UndoHandler.js';
 import { log } from '../log.js';
+import { escapeHtml, formatBytes, formatRelativeTime } from './format.js';
+import { openManageImports } from './ManageImportsDialog.js';
 
 /**
  * Builds the ImportDialog ApplicationV2 class. Factory pattern because
@@ -102,6 +104,12 @@ export function buildImportDialog(): typeof foundry.applications.api.Application
       });
 
       // Undo last import button — only present when there's history.
+      root.querySelector<HTMLElement>('#zenith-manage-imports')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await this.close();
+        await openManageImports();
+      });
+
       const undoButton = root.querySelector<HTMLButtonElement>('#zenith-undo-last');
       undoButton?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -218,46 +226,4 @@ export function buildImportDialog(): typeof foundry.applications.api.Application
       }
     }
   } as unknown as typeof foundry.applications.api.ApplicationV2;
-}
-
-// ============================================================================
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
-
-/** Human-readable relative time for the imported-at timestamp. */
-function formatRelativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return 'recently';
-  const seconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
-  return new Date(iso).toLocaleDateString();
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (ch) => {
-    switch (ch) {
-      case '&':
-        return '&amp;';
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
-      case '"':
-        return '&quot;';
-      case "'":
-        return '&#39;';
-      default:
-        return ch;
-    }
-  });
 }

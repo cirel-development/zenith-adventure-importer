@@ -6,6 +6,7 @@ import { selfTest, registerQuench } from './testing/fixtureSuite.js';
 import { Importer } from './pipeline/Importer.js';
 import { UndoHandler } from './apps/UndoHandler.js';
 import { getImportRecord } from './settings.js';
+import { buildManageImportsDialog, openManageImports } from './apps/ManageImportsDialog.js';
 
 // ============================================================================
 // Init: register settings before world is ready
@@ -14,6 +15,15 @@ import { getImportRecord } from './settings.js';
 Hooks.once('init', () => {
   log.info(`${MODULE_TITLE} initializing`);
   registerSettings();
+  // Module Settings -> "Manage Imports": browse, undo or forget past imports.
+  (game.settings as any).registerMenu(MODULE_ID, 'manageImports', {
+    name: 'Adventure imports',
+    label: 'Manage Imports',
+    hint: 'See every adventure imported into this world, and undo or forget an import.',
+    icon: 'fas fa-list',
+    type: buildManageImportsDialog(),
+    restricted: true,
+  });
 });
 
 // ============================================================================
@@ -29,6 +39,8 @@ Hooks.once('ready', () => {
   if (module) {
     module.api = {
       openImportDialog,
+      /** Lists past imports with Undo / Forget (GM only). */
+      openManageImports,
       /** Imports zenith-fixtures/test-bundle.zip, checks every fixture, undoes it. */
       selfTest,
       /** Scripted import (same pipeline as the dialog's URL mode). GM only. */

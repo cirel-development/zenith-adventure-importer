@@ -39,13 +39,22 @@ export const ProgressDialog = (() => {
     private undoSummary: UndoSummary | null = null;
     private errorMessage = '';
 
+    /**
+     * ApplicationV2 keeps the title in options.window.title and renders it in
+     * the header element at this.window.title; assigning a string to the
+     * latter (the old approach) never reached the screen.
+     */
+    private setTitle(text: string): void {
+      const app = this as any;
+      if (app.options?.window) app.options.window.title = text;
+      const el = app.window?.title;
+      if (el instanceof HTMLElement) el.textContent = text;
+    }
+
     /** Set before showing the dialog so the running view uses correct title. */
     setMode(mode: 'import' | 'undo'): void {
       this.mode = mode;
-      const window = (this as any).window;
-      if (window) {
-        window.title = mode === 'undo' ? 'Undoing...' : 'Importing...';
-      }
+      this.setTitle(mode === 'undo' ? 'Undoing...' : 'Importing...');
     }
 
     override async _prepareContext(options: unknown): Promise<unknown> {
@@ -93,10 +102,7 @@ export const ProgressDialog = (() => {
       this.summary = summary;
       this.state = 'complete';
       this.mode = 'import';
-      const window = (this as any).window;
-      if (window) {
-        window.title = 'Import Complete';
-      }
+      this.setTitle('Import Complete');
       await this.render(false);
     }
 
@@ -104,20 +110,14 @@ export const ProgressDialog = (() => {
       this.undoSummary = summary;
       this.state = 'complete';
       this.mode = 'undo';
-      const window = (this as any).window;
-      if (window) {
-        window.title = 'Undo Complete';
-      }
+      this.setTitle('Undo Complete');
       await this.render(false);
     }
 
     async showError(message: string): Promise<void> {
       this.errorMessage = message;
       this.state = 'error';
-      const window = (this as any).window;
-      if (window) {
-        window.title = this.mode === 'undo' ? 'Undo Failed' : 'Import Failed';
-      }
+      this.setTitle(this.mode === 'undo' ? 'Undo Failed' : 'Import Failed');
       await this.render(false);
     }
 

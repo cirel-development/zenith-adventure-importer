@@ -317,3 +317,54 @@
      without breaking theme adaptation */
   opacity: 0.65;
 }
+
+/* ---- Manage Imports ---------------------------------------------------- */
+.zenith-manage-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.9em;
+}
+.zenith-import-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.zenith-import-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-light-2, #7a7971);
+  border-radius: 4px;
+}
+.zenith-import-row.zenith-import-stale {
+  opacity: 0.7;
+}
+.zenith-import-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.zenith-import-meta,
+.zenith-import-id {
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+.zenith-import-warning {
+  font-size: 0.85em;
+  color: var(--color-level-warning, #c9a227);
+}
+.zenith-import-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.zenith-import-actions button {
+  width: auto;
+  white-space: nowrap;
+}

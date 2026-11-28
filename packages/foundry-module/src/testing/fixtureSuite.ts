@@ -17,6 +17,7 @@
  */
 import { Importer } from '../pipeline/Importer.js';
 import { UndoHandler } from '../apps/UndoHandler.js';
+import { buildManageImportsDialog, describeRecord } from '../apps/ManageImportsDialog.js';
 import { getAllImportRecords, getImportRecord, type ImportRecord } from '../settings.js';
 
 /** Served by Foundry from <Data>/zenith-fixtures/ (setup.ps1 copies it there). */
@@ -481,6 +482,25 @@ export const cases: TestCase[] = [
       const page = j.pages.contents[0];
       eq(page.name, 'How to use this bundle', 'page name');
       ok(String(page.text?.content ?? '').includes('Verification checklist'), 'page content');
+    },
+  },
+  {
+    name: 'manage imports: window lists this import with its counts',
+    run: async (s) => {
+      const record = requireRecord(s);
+      const info = describeRecord(record);
+      eq([info.present, info.total, info.stale], [record.createdEntities.length, record.createdEntities.length, false], 'every document present');
+      ok(info.counts.includes('1 scenes') && info.counts.includes(`${EXPECTED_ACTORS} actors`), `counts by type (${info.counts})`);
+      const Dialog = buildManageImportsDialog();
+      const app = new (Dialog as any)();
+      await app.render(true);
+      try {
+        const row = (app.element as HTMLElement).querySelector(`.zenith-import-row[data-bundle-id="${record.bundleId}"]`);
+        ok(row, 'row for this import');
+        ok(row?.querySelector('[data-action="undoImport"]') && row?.querySelector('[data-action="forgetImport"]'), 'Undo and Forget buttons');
+      } finally {
+        await app.close();
+      }
     },
   },
   {
