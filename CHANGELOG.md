@@ -1,5 +1,48 @@
 # Changelog
 
+## v0.2.1
+
+Same requirements as v0.2.0: Foundry VTT v14 (verified 14.371) and the PF2e system 8.7.x. Bundles
+made for v0.2.0 still import.
+
+### Castable spells
+- Spellcasting printed in a stat block (innate, prepared, spontaneous and focus) becomes a real PF2e
+  spellcasting entry with its DC and attack, and the spells come from PF2e's spell compendium:
+  heightened ranks, "(×2)" uses, prepared slots, spontaneous slots, Focus Points, and notes such as
+  "At Will" and "Constant". Cantrips heighten automatically.
+- Older books' spell names (magic missile, tongues, ...) find their Remaster spells.
+- A spell that isn't in the compendium is listed on its entry, and the actor is flagged for review.
+  Rituals stay as text in the Notes tab.
+
+### Real items
+- Items found in the adventure import as the PF2e compendium item when one exists, with the
+  adventure's text added to the description under "In this adventure". Before, every item was a
+  blank placeholder.
+- Magic weapons and armor printed as "+1 striking flaming longsword" or "+1 resilient breastplate"
+  get the base item with those runes, and precious materials ("low-grade silver rapier") are set
+  on the item.
+- Names that PF2e words differently still match: "Lesser Healing Potion", "Wolf Fang Talisman",
+  "Onyx Dog Wondrous Figurine", "Studded Leather". Items printed without a grade ("Energy
+  Mutagen") get the lowest grade and are flagged for review. Quest objects, keys and handouts are
+  never matched.
+
+### Gear on creatures
+- The Items line of a parsed stat block becomes PF2e items on the creature, with runes, materials,
+  quantities ("daggers (2)") and printed notes ("10 bolts"). "Functions as a dagger" uses the
+  dagger. Weapons are held (two hands at most), the first armor is worn, bombs are carried.
+  Gear that isn't in the compendium stays as text in the Notes tab.
+
+### Creatures
+- "Weak" and "Elite" creatures ("Weak Ghost Commoner") import as the compendium creature with PF2e's
+  Weak or Elite adjustment applied.
+
+### Fixes
+- Property runes on runed items were stored under the wrong key and never took effect.
+- Two items or creatures built from the same compendium entry could share each other's edits
+  (runes, names, notes).
+- If PF2e rejects a creature, the importer now drops copied spells and gear first and keeps the
+  stat block's own strikes and abilities.
+
 ## v0.2.0
 
 **Requires Foundry VTT v14 (verified 14.371) and the PF2e system 8.7.x.** Foundry v13 users: stay on

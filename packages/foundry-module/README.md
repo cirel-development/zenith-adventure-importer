@@ -11,9 +11,13 @@ Foundry VTT v14 module (PF2e 8.7.x) that imports adventure bundles produced by t
 - Asset upload to Foundry user data
 - Folder hierarchy (topological build order)
 - Multi-page journal entries with per-page permissions
-- Items (compendium-ref, compendium-ref-with-runes, custom)
-- Actors (compendium-ref with notes overlay and variant overrides, custom NPCs/creatures with
-  real stats from parsed stat blocks, loot containers), mapped to PF2e 8.x fields
+- Items (compendium-ref and compendium-ref-with-runes with precious materials and a notes
+  overlay, custom)
+- Actors (compendium-ref with notes overlay, variant overrides and Elite/Weak adjustment, custom
+  NPCs/creatures with real stats from parsed stat blocks, loot containers), mapped to PF2e 8.x
+  fields
+- Spellcasting entries with compendium spells, and inventory (runes, materials, quantities,
+  held/worn) on custom NPCs
 - Scenes with walls, lights, ambient sounds, map notes (written for v13; not yet re-tested on v14)
 - In-Foundry self-test: `await game.modules.get('zenith-adventure-importer').api.selfTest()`
 - Empty playlist scaffolding
