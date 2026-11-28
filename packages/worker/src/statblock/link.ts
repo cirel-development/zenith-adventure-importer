@@ -9,9 +9,10 @@
  * full block in the same PDF; the variant's own fields win.
  */
 import type { Bundle } from '@ai-adventure/contract';
-import { normalizeName } from '../compendium/index.js';
+import { normalizeName, type CompendiumIndex } from '../compendium/index.js';
 import type { ScannedBlock } from './scan.js';
 import { parseStatBlock, type ParseResult, type ParsedStatBlock } from './parse.js';
+import { LEGACY_SPELL_NAMES, type ParsedSpellcasting } from './spells.js';
 
 type CustomStatBlock = Extract<Bundle['actors']['entities'][number]['stat_block'], { kind: 'custom' }>;
 
@@ -67,6 +68,7 @@ export function mergeVariant(base: ParsedStatBlock, variant: ParsedStatBlock): P
     resistances: listOr(variant.resistances, base.resistances),
     speeds: pick(variant.speeds, base.speeds),
     strikes: listOr(variant.strikes, base.strikes),
+    spellcasting: listOr(variant.spellcasting, base.spellcasting),
     abilitiesText: [variant.abilitiesText, base.abilitiesText].filter(Boolean).join(' '),
     defensiveText: [variant.defensiveText, base.defensiveText].filter(Boolean).join(' '),
   };
@@ -101,11 +103,62 @@ export function linkStatBlock(npcName: string, byName: Map<string, ScannedBlock>
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+/** Spell name -> PF2e spells-srd UUID, trying the Remaster name for renamed spells. */
+export type SpellResolver = (name: string) => string | null;
+
+export function spellResolver(idx: CompendiumIndex): SpellResolver {
+  return (name) => {
+    // "mountain's resilience" is printed for PF2e's "Mountain Resilience".
+    for (const n of new Set([normalizeName(name), normalizeName(name.replace(/['’]s(?=\s|$)/g, ''))])) {
+      const hit = idx.findSpell(n) ?? (LEGACY_SPELL_NAMES[n] ? idx.findSpell(LEGACY_SPELL_NAMES[n]!) : null);
+      if (hit) return hit.uuid;
+    }
+    return null;
+  };
+}
+
+/** Parsed entries -> contract spellcasting. Cantrips go under "0"; constant spells carry note "constant". */
+export function toContractSpellcasting(entries: ParsedSpellcasting[], resolve?: SpellResolver): CustomStatBlock['spellcasting'] {
+  return entries.map((e) => {
+    const spells: CustomStatBlock['spellcasting'][number]['spells'] = {};
+    const rankSlots: Record<string, number> = {};
+    for (const r of e.ranks) {
+      const key = r.cantrip ? '0' : String(r.rank);
+      if (r.slots !== undefined) rankSlots[key] = r.slots;
+      for (const sp of r.spells) {
+        const uuid = resolve?.(sp.name) ?? null;
+        const note = [r.constant ? 'constant' : '', sp.note ?? ''].filter(Boolean).join('; ');
+        (spells[key] ??= []).push({
+          name: sp.name,
+          ...(uuid ? { uuid } : {}),
+          ...(sp.uses ? { uses: sp.uses } : {}),
+          ...(note ? { note } : {}),
+        });
+      }
+    }
+    return {
+      name: e.name,
+      tradition: e.tradition,
+      type: e.type,
+      dc: e.dc,
+      ...(e.attack !== null ? { attack_bonus: e.attack } : {}),
+      ...(e.focusPoints !== null ? { focus_points: e.focusPoints } : {}),
+      ...(Object.keys(rankSlots).length ? { rank_slots: rankSlots } : {}),
+      spells,
+    };
+  });
+}
+
+/** Spell names in a custom stat block that have no compendium UUID. */
+export function unresolvedSpells(sb: CustomStatBlock): string[] {
+  return sb.spellcasting.flatMap((e) => Object.values(e.spells).flat().filter((s) => !s.uuid).map((s) => s.name));
+}
+
 /**
  * Contract custom stat block from a parse. Fields the parse could not read
  * fall back to the level-based placeholders, and are listed in `missing`.
  */
-export function toCustomStatBlock(p: ParsedStatBlock, notesHtml: string): CustomStatBlock {
+export function toCustomStatBlock(p: ParsedStatBlock, notesHtml: string, resolveSpell?: SpellResolver): CustomStatBlock {
   const lvl = p.level;
   const abilityText = [p.defensiveText, p.abilitiesText].filter(Boolean).join(' ');
   return {
@@ -138,7 +191,7 @@ export function toCustomStatBlock(p: ParsedStatBlock, notesHtml: string): Custom
       traits: s.traits,
     })),
     actions: [],
-    spellcasting: [],
+    spellcasting: toContractSpellcasting(p.spellcasting, resolveSpell),
     inventory: [],
     tactics_html:
       notesHtml +

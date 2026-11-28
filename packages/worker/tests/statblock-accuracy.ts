@@ -86,7 +86,50 @@ function compare(p: ParsedStatBlock, d: any): Check[] {
   const pWeak = p.weaknesses.map((w) => `${slug(w.type)}:${w.value}`).sort();
   const tRes = (s.attributes.resistances ?? []).map((r: any) => `${r.type}:${r.value}`).sort();
   const pRes = p.resistances.map((r) => `${slug(r.type)}:${r.value}`).sort();
+  // Spellcasting: entries (tradition, type, DC), spells by rank, and ×N uses.
+  // Only scored when either side has spells.
+  const tEntries = (d.items as any[]).filter((i) => i.type === 'spellcastingEntry' && i.system.prepared?.value !== 'ritual');
+  const spellName = (n: string) => normalizeName(n.replace(/\s\(.*$/, '').replace(/['’]s(?=\s|$)/g, ''));
+  const tSpells = (d.items as any[]).filter((i) => i.type === 'spell' && tEntries.some((e) => e._id === i.system.location?.value));
+  const tEntryKeys = tEntries.map((e) => `${e.system.tradition.value} ${e.system.prepared.value} DC${e.system.spelldc.dc}`).sort();
+  const pEntryKeys = p.spellcasting.map((e) => `${e.tradition} ${e.type} DC${e.dc}`).sort();
+  const isCantrip = (i: any) => (i.system.traits?.value ?? []).includes('cantrip');
+  // Prepared entries cast at the rank of the slot a spell is prepared in, once per slot.
+  const preparedIn = (i: any): number[] => {
+    const e = tEntries.find((x) => x._id === i.system.location.value);
+    if (e?.system.prepared.value !== 'prepared') return [];
+    return Object.entries(e.system.slots ?? {}).flatMap(([k, v]: [string, any]) =>
+      (v.prepared ?? []).filter((x: any) => x.id === i._id).map(() => Number(k.replace('slot', ''))),
+    );
+  };
+  const tSpellKeys = tSpells
+    .flatMap((i) => {
+      const slots = preparedIn(i);
+      const ranks = slots.length ? [...new Set(slots)] : [isCantrip(i) ? 0 : (i.system.location.heightenedLevel ?? i.system.level.value)];
+      return ranks.map((r) => `${spellName(i.name)}@${isCantrip(i) ? 0 : r}`);
+    })
+    .sort();
+  const pSpellKeys = p.spellcasting.flatMap((e) => e.ranks.flatMap((r) => r.spells.map((x) => `${spellName(x.name)}@${r.cantrip ? 0 : r.rank}`))).sort();
+  const tUses = tSpells
+    .flatMap((i) => {
+      const slots = preparedIn(i);
+      if (slots.length) return [...new Set(slots)].map((r) => [i, slots.filter((x) => x === r).length] as const);
+      return [[i, i.system.location.uses?.max ?? 1] as const];
+    })
+    .filter(([, n]) => n > 1)
+    .map(([i, n]) => `${spellName(i.name)}x${n}`)
+    .sort();
+  const pUses = p.spellcasting.flatMap((e) => e.ranks.flatMap((r) => r.spells.filter((x) => (x.uses ?? 1) > 1).map((x) => `${spellName(x.name)}x${x.uses}`))).sort();
+  const spellChecks: Check[] =
+    tEntries.length || p.spellcasting.length
+      ? [
+          ['spell entries', eq(pEntryKeys, tEntryKeys), pEntryKeys, tEntryKeys],
+          ['spell list', eq(pSpellKeys, tSpellKeys), pSpellKeys, tSpellKeys],
+          ['spell uses', eq(pUses, tUses), pUses, tUses],
+        ]
+      : [];
   return [
+    ...spellChecks,
     ['level', p.level === s.details.level.value, p.level, s.details.level.value],
     ['rarity', p.rarity === s.traits.rarity, p.rarity, s.traits.rarity],
     ['size', SIZE[p.size ?? ''] === s.traits.size.value, p.size, s.traits.size.value],

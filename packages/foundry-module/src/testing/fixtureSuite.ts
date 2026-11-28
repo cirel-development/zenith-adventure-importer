@@ -22,8 +22,8 @@ import { getAllImportRecords, getImportRecord, type ImportRecord } from '../sett
 /** Served by Foundry from <Data>/zenith-fixtures/ (setup.ps1 copies it there). */
 export const FIXTURE_PATH = 'zenith-fixtures/test-bundle.zip';
 const FIXTURE_ADVENTURE_SLUG = 'test-bundle-2a';
-const EXPECTED_ACTORS = 21; // 16 custom + 1 parsed + 4 compendium-ref
-const EXPECTED_ENTITIES = 4 /* folders */ + 1 /* journal */ + 1 /* item */ + EXPECTED_ACTORS;
+const EXPECTED_ACTORS = 22; // 16 custom + 2 parsed + 4 compendium-ref
+const EXPECTED_ENTITIES = 4 /* folders */ + 1 /* journal */ + 5 /* items */ + EXPECTED_ACTORS;
 
 export interface SuiteState {
   record: ImportRecord | null;
@@ -282,6 +282,43 @@ export const cases: TestCase[] = [
     },
   },
   {
+    name: 'parsed spells: innate entry with heightened ranks, uses, notes, cantrips',
+    run: (s) => {
+      const a = actor(s, 'parsed-caster');
+      const entries = a.items.filter((i: any) => i.type === 'spellcastingEntry');
+      eq(entries.map((e: any) => e.name), ['Primal Innate Spells', 'Arcane Prepared Spells', 'Occult Spontaneous Spells', 'Cleric Domain Spells'], 'entries');
+      const innate = entries[0];
+      eq([innate._source.system.tradition.value, innate._source.system.prepared.value], ['primal', 'innate'], 'tradition/type');
+      eq([innate._source.system.spelldc.dc, innate._source.system.spelldc.value], [27, 19], 'DC and attack');
+      ok(String(innate._source.system.description.value).includes('zenith imaginary spell'), 'unresolved spell listed on the entry');
+      const spells = a.items.filter((i: any) => i.type === 'spell' && i._source.system.location.value === innate.id);
+      eq(spells.map((i: any) => i.name).sort(), ['Detect Magic', 'Fireball', 'Invisibility (At Will; Self Only)', 'Truespeech (Constant)'], 'spell names');
+      const fireball = spells.find((i: any) => i.name === 'Fireball');
+      eq(fireball._source.system.location.heightenedLevel, 5, 'heightened to the printed rank');
+      eq(fireball._source.system.location.uses, { max: 2, value: 2 }, '(x2) -> uses');
+      eq(fireball.rank, 5, 'PF2e casts it at rank 5');
+      const cantrip = spells.find((i: any) => i.name === 'Detect Magic');
+      eq(cantrip._source.system.location.heightenedLevel ?? null, null, 'cantrip auto-heightens');
+      ok(spells.every((i: any) => String(i._source._stats?.compendiumSource ?? '').startsWith('Compendium.pf2e.spells-srd.')), 'spells linked to spells-srd');
+    },
+  },
+  {
+    name: 'parsed spells: prepared slots, spontaneous slots, focus pool',
+    run: (s) => {
+      const a = actor(s, 'parsed-caster');
+      const entry = (name: string) => a.items.find((i: any) => i.type === 'spellcastingEntry' && i.name === name);
+      const prepared = entry('Arcane Prepared Spells');
+      const haste = a.items.find((i: any) => i.type === 'spell' && i._source.system.location.value === prepared.id);
+      eq(haste?.name, 'Haste', 'prepared spell');
+      eq(prepared._source.system.slots.slot3.prepared.map((p: any) => p.id), [haste.id, haste.id], 'prepared twice in rank-3 slots');
+      eq(haste._source.system.location.heightenedLevel ?? null, null, 'prepared rank comes from the slot');
+      eq(entry('Occult Spontaneous Spells')._source.system.slots.slot1.max, 3, 'spontaneous slots');
+      const focus = entry('Cleric Domain Spells');
+      eq(focus._source.system.prepared.value, 'focus', 'focus entry');
+      eq(src(a, 'system.resources.focus.max'), 1, 'focus pool');
+    },
+  },
+  {
     name: 'compendium-ref NPC: Monster Core goblin + adventure notes overlay',
     run: (s) => {
       const a = actor(s, 'compendium-npc');
@@ -325,6 +362,32 @@ export const cases: TestCase[] = [
       ok(typeof src(a, 'system.attributes.stealth.value') === 'number', 'structured stealth from compendium');
       const desc = String(src(a, 'system.details.description') ?? '');
       ok(desc.includes('ZENITH-OVERLAY-HAZARD'), 'overlay appended to details.description');
+    },
+  },
+  {
+    name: 'compendium items: runes on a shared base stay separate, notes appended',
+    run: (s) => {
+      const flaming = doc(s, 'item', 'item-runes-flaming');
+      const plain = doc(s, 'item', 'item-runes-plain');
+      eq([flaming.type, plain.type], ['weapon', 'weapon'], 'both are weapons');
+      eq(flaming.name, 'Item Test — +2 Greater Striking Flaming Rapier', 'printed name kept');
+      eq([src(flaming, 'system.runes.potency'), src(flaming, 'system.runes.striking'), src(flaming, 'system.runes.property')], [2, 2, ['flaming']], 'flaming rapier runes');
+      eq([src(plain, 'system.runes.potency'), src(plain, 'system.runes.striking'), src(plain, 'system.runes.property')], [1, 1, []], 'plain rapier runes (no leak)');
+      eq(flaming.system.damage?.dice, 3, 'PF2e derives 3 damage dice from greater striking');
+      ok(String(src(flaming, 'system.description.value')).includes('ZENITH-ITEM-NOTES item-runes-flaming'), 'notes on flaming rapier');
+      ok(!String(src(plain, 'system.description.value')).includes('item-runes-flaming'), 'notes did not leak');
+    },
+  },
+  {
+    name: 'compendium items: precious material and plain consumable',
+    run: (s) => {
+      const dagger = doc(s, 'item', 'item-material');
+      eq(src(dagger, 'system.material'), { type: 'silver', grade: 'low' }, 'material');
+      const potion = doc(s, 'item', 'item-potion');
+      eq(potion.type, 'consumable', 'potion type');
+      const desc = String(src(potion, 'system.description.value'));
+      ok(desc.includes('<h3>In this adventure</h3>') && desc.includes('ZENITH-ITEM-NOTES item-potion'), 'notes overlay');
+      ok(desc.indexOf('ZENITH') > 20, 'compendium description kept before the overlay');
     },
   },
   {

@@ -3,6 +3,8 @@
  * Run: pnpm --filter zenith-adventure-importer test:mappings
  */
 import {
+  appendAdventureNotes,
+  toPf2ePropertyRuneSlug,
   isLoreSkill,
   splitKnownDefenses,
   toPf2eAttackEffects,
@@ -13,6 +15,8 @@ import {
   toPf2eSenses,
   toPf2eSize,
   toPf2eSkillSlug,
+  toPf2eSpellLabel,
+  toPf2eSpellPlacement,
   toPf2eStrikeTraits,
 } from '../src/builders/pf2eMappings.js';
 
@@ -70,6 +74,24 @@ check('strike traits', toPf2eStrikeTraits(['agile', 'reach 10 feet', 'versatile 
 check('attack effects', toPf2eAttackEffects(['Grab', 'Improved Knockdown']), ['grab', 'improved-knockdown']);
 check('lore skill', [isLoreSkill('Farming Lore'), isLoreSkill('Athletics')], [true, false]);
 check('skill slugs', ['Arcane', 'Occult', 'Athletics'].map(toPf2eSkillSlug), ['arcana', 'occultism', 'athletics']);
+
+check('spell label at will', toPf2eSpellLabel('at will; self only'), 'At Will; Self Only');
+check('spell label constant', toPf2eSpellLabel('constant'), 'Constant');
+check('spell label small words', toPf2eSpellLabel('to Astral Plane, Elemental Planes, or the Universe only'), 'To Astral Plane, Elemental Planes, or the Universe Only');
+check('spell label undefined', toPf2eSpellLabel(undefined), '');
+check('placement cantrip', toPf2eSpellPlacement('e1', 'innate', 0, undefined), { location: { value: 'e1' }, preparedCount: 0 });
+check('placement innate uses', toPf2eSpellPlacement('e1', 'innate', 4, 3), { location: { value: 'e1', heightenedLevel: 4, uses: { max: 3, value: 3 } }, preparedCount: 0 });
+check('placement prepared', toPf2eSpellPlacement('e1', 'prepared', 3, 2), { location: { value: 'e1' }, preparedCount: 2 });
+check('placement spontaneous', toPf2eSpellPlacement('e1', 'spontaneous', 2, undefined), { location: { value: 'e1', heightenedLevel: 2 }, preparedCount: 0 });
+check('placement focus auto-heightens', toPf2eSpellPlacement('e1', 'focus', 3, undefined), { location: { value: 'e1' }, preparedCount: 0 });
+
+check('rune slug simple', toPf2ePropertyRuneSlug('Flaming'), 'flaming');
+check('rune slug graded', toPf2ePropertyRuneSlug('Flaming (Greater)'), 'greaterFlaming');
+check('rune slug two words', toPf2ePropertyRuneSlug('Ghost Touch'), 'ghostTouch');
+check('rune slug hyphen', toPf2ePropertyRuneSlug('Energy-Resistant'), 'energyResistant');
+check('rune slug apostrophes', toPf2ePropertyRuneSlug("Fear-Some's Bane"), 'fearSomesBane');
+check('adventure notes fresh', appendAdventureNotes('', '<p>x</p>'), '<h3>In this adventure</h3><p>x</p>');
+check('adventure notes existing', appendAdventureNotes('<p>a</p>', '<p>x</p>'), '<p>a</p><hr><h3>In this adventure</h3><p>x</p>');
 
 if (failures.length) {
   console.error(`\n${failures.length} mapping check(s) failed`);

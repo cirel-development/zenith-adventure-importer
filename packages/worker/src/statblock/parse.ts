@@ -6,10 +6,11 @@
  * fields found, minus penalties for an uncertain block end. Blocks under
  * 0.7 are meant for the AI fallback (task 5).
  *
- * Scope (decided 2026-11-27): stats and strikes are parsed; special
- * abilities and spells are kept verbatim in `abilitiesText`.
+ * Scope (decided 2026-11-27): stats, strikes and spellcasting entries are
+ * parsed; special abilities are kept verbatim in `abilitiesText`.
  */
 import type { ScannedBlock } from './scan.js';
+import { extractSpellcasting, type ParsedSpellcasting } from './spells.js';
 
 export interface ParsedStrike {
   kind: 'melee' | 'ranged';
@@ -44,7 +45,9 @@ export interface ParsedStatBlock {
   resistances: { type: string; value: number }[];
   speeds: { land: number; [other: string]: number } | null;
   strikes: ParsedStrike[];
-  /** Special abilities, spells and anything after the strikes, verbatim. */
+  /** Spellcasting entries read from the ability text (see spells.ts). */
+  spellcasting: ParsedSpellcasting[];
+  /** Special abilities and anything after the strikes, verbatim, minus parsed spell entries. */
   abilitiesText: string;
   /** Reactions/auras printed between HP and Speed (e.g. "Ferocity [reaction]"). */
   defensiveText: string;
@@ -271,7 +274,8 @@ export function parseStatBlock(scanned: ScannedBlock): ParseResult {
     for (const o of speedMatch[2]!.matchAll(/(fly|swim|climb|burrow)\s(\d+)/g)) speeds[o[1]!] = Number(o[2]);
   }
   const afterSpeed = speeds && speedMatch ? speedSeg.slice(speedMatch[0].length) : speedSeg;
-  const { strikes, rest } = parseStrikes(afterSpeed);
+  const { strikes, rest: afterStrikes } = parseStrikes(afterSpeed);
+  const { entries: spellcasting, rest } = extractSpellcasting(afterStrikes);
 
   const perceptionSeg = segment(body, labels, 'Perception');
   const perceptionM = perceptionSeg ? /^([+-]\d+)[;,]?\s*(.*)$/.exec(perceptionSeg) : null;
@@ -326,6 +330,7 @@ export function parseStatBlock(scanned: ScannedBlock): ParseResult {
     resistances: parseResistLike(segment(body, labels, 'Resistances')),
     speeds,
     strikes,
+    spellcasting,
     abilitiesText: rest.trim(),
     defensiveText,
   };

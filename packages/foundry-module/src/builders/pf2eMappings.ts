@@ -231,3 +231,78 @@ export function toPf2eLanguages(names: readonly string[], known?: Iterable<strin
 
   return { value, details: unknown.join(', ') };
 }
+
+// ---------------------------------------------------------------------------
+// Spellcasting (PF2e 8.x: a spellcastingEntry item plus spell items whose
+// system.location.value is the entry's _id)
+// ---------------------------------------------------------------------------
+
+const SMALL_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'with']);
+
+/**
+ * Printed spell note -> the parenthetical PF2e puts in the spell's name:
+ * "at will; self only" -> "At Will; Self Only", "constant" -> "Constant".
+ */
+export function toPf2eSpellLabel(note: string | undefined): string {
+  if (!note) return '';
+  return note
+    .split(/;\s*/)
+    .filter(Boolean)
+    .map((part) =>
+      part
+        .split(' ')
+        .map((w, i) => (i > 0 && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+        .join(' '),
+    )
+    .join('; ');
+}
+
+export interface Pf2eSpellPlacement {
+  /** system.location for the spell item. */
+  location: { value: string; heightenedLevel?: number; uses?: { max: number; value: number } };
+  /** Prepared entries: how many times the spell fills a slot of `rank`. */
+  preparedCount: number;
+}
+
+/**
+ * Where a spell goes in its entry. Cantrips (rank key 0) and focus spells
+ * auto-heighten; prepared spells take their rank from the slot; innate and
+ * spontaneous spells carry heightenedLevel; innate "(×N)" becomes uses.
+ */
+export function toPf2eSpellPlacement(
+  entryId: string,
+  type: 'prepared' | 'spontaneous' | 'innate' | 'focus',
+  rank: number,
+  uses: number | undefined,
+): Pf2eSpellPlacement {
+  const location: Pf2eSpellPlacement['location'] = { value: entryId };
+  if (rank > 0 && (type === 'innate' || type === 'spontaneous')) location.heightenedLevel = rank;
+  if (type === 'innate' && uses && uses > 1) location.uses = { max: uses, value: uses };
+  return { location, preparedCount: type === 'prepared' ? (uses ?? 1) : 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Runes and precious materials (PF2e 8.x: system.runes / system.material)
+// ---------------------------------------------------------------------------
+
+/**
+ * PF2e property-rune key from the rune item's name:
+ * "Flaming" -> "flaming", "Flaming (Greater)" -> "greaterFlaming",
+ * "Ghost Touch" -> "ghostTouch", "Energy-Resistant" -> "energyResistant".
+ */
+export function toPf2ePropertyRuneSlug(runeName: string): string {
+  const m = /^(.*?)\s*\(([^)]*)\)\s*$/.exec(runeName.trim());
+  const words = [...(m ? [m[2]!] : []), m ? m[1]! : runeName]
+    .join(' ')
+    .replace(/['’]/g, '')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((w) => w.toLowerCase());
+  return words.map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1))).join('');
+}
+
+/** Append the adventure's text below an item's compendium description. */
+export function appendAdventureNotes(existing: unknown, notesHtml: string): string {
+  const base = typeof existing === 'string' ? existing : '';
+  return `${base}${base ? '<hr>' : ''}<h3>In this adventure</h3>${notesHtml}`;
+}

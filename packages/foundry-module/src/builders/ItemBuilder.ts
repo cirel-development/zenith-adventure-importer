@@ -8,6 +8,7 @@ import type { AssetMap } from '../pipeline/AssetUploader.js';
 import type { EntityRegistry } from '../pipeline/EntityRegistry.js';
 import type { CompendiumLookup } from '../compendium/CompendiumLookup.js';
 import { RuneApplicator } from '../compendium/RuneApplicator.js';
+import { appendAdventureNotes } from './pf2eMappings.js';
 import { log } from '../log.js';
 
 declare const Item: { create(data: unknown): Promise<ItemDoc> };
@@ -61,9 +62,12 @@ export class ItemBuilder {
 
     data['folder'] = folderId;
     data['name'] = entry.name;
+    const existingFlags = (data['flags'] as Record<string, any> | undefined) ?? {};
     data['flags'] = {
-      ...(data['flags'] as Record<string, unknown> ?? {}),
+      ...existingFlags,
       'zenith-adventure-importer': {
+        // Keep driftWarning / skippedRunes set while building.
+        ...(existingFlags['zenith-adventure-importer'] ?? {}),
         slug: entry.slug,
         category: entry.category,
         ...(entry.ai_metadata?.review_required
@@ -125,6 +129,7 @@ export class ItemBuilder {
             },
           };
         }
+        this.applyMaterialAndNotes(source, entry.data);
         return source;
       }
 
@@ -145,11 +150,29 @@ export class ItemBuilder {
         if (entry.data.name_override) {
           result['name'] = entry.data.name_override;
         }
+        this.applyMaterialAndNotes(result, entry.data);
         return result;
       }
 
       case 'custom':
         return this.buildCustom(entry, entry.data);
+    }
+  }
+
+  /** Precious material and the adventure's text on a compendium item (v0.2.1). */
+  private applyMaterialAndNotes(
+    source: Record<string, unknown>,
+    d: { material?: { type: string; grade: 'low' | 'standard' | 'high' }; notes_html?: string },
+  ): void {
+    const system = ((source['system'] as Record<string, any>) ??= {});
+    if (d.material) {
+      const known = (CONFIG as any)?.PF2E?.preciousMaterials;
+      if (!known || d.material.type in known) system['material'] = { type: d.material.type, grade: d.material.grade };
+      else log.warn(`precious material "${d.material.type}" unknown to PF2e; skipped`);
+    }
+    if (d.notes_html) {
+      const description = ((system['description'] as Record<string, unknown>) ??= {});
+      description['value'] = appendAdventureNotes(description['value'], d.notes_html);
     }
   }
 

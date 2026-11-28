@@ -8,8 +8,9 @@ import {
 import type { ExtractedAdventure } from '../pipeline/extractAdventure.js';
 import type { CompendiumIndex } from '../compendium/index.js';
 import { planActorMatches, type ActorMatchDecision } from '../compendium/match.js';
+import { planItem, type ItemPlan } from '../compendium/items.js';
 import { scanStatBlocks } from '../statblock/scan.js';
-import { indexBlocks, linkStatBlock, toCustomStatBlock } from '../statblock/link.js';
+import { indexBlocks, linkStatBlock, spellResolver, toCustomStatBlock, unresolvedSpells } from '../statblock/link.js';
 import { scoreParsed, type ParsedStatBlock } from '../statblock/parse.js';
 import { normalizeName } from '../compendium/index.js';
 
@@ -55,6 +56,11 @@ export interface AssembleOptions {
    * (see compendium/match.ts) become compendium-refs; the rest stay custom.
    */
   compendium?: CompendiumIndex;
+  /**
+   * Index used only to link parsed spells to spells-srd, for runs with
+   * creature matching off. Defaults to `compendium`.
+   */
+  spellIndex?: CompendiumIndex;
   /**
    * The PDF's extracted text. When given, NPCs not matched in the compendium
    * get real stats parsed from their stat block (statblock/link.ts).
@@ -272,6 +278,8 @@ export function assembleBundle(
   const plan = opts.compendium ? planActorMatches(opts.compendium, extracted) : null;
   const blockIndex = opts.pdfText ? indexBlocks(scanStatBlocks(opts.pdfText)) : null;
   const versionPin = opts.compendium ? `pf2e@${opts.compendium.version}` : undefined;
+  const spellIdx = opts.spellIndex ?? opts.compendium;
+  const resolveSpell = spellIdx ? spellResolver(spellIdx) : undefined;
 
   const compendiumActor = (
     base: { slug: string; name: string; category: Bundle['actors']['entities'][number]['category']; folder: string },
@@ -349,9 +357,13 @@ export function assembleBundle(
       if (scanned.form === 'variant' && !linked.base && scanned.variantOf)
         reasons.push(`Variant of ${scanned.variantOf.name} (${scanned.variantOf.source}); fields the variant doesn't list are placeholders.`);
       if (parse.confidence < 0.7) reasons.push(`Low parse confidence (${parse.confidence}).`);
+      const statBlock = toCustomStatBlock(parse.block, notesHtml, resolveSpell);
+      const missingSpells = unresolvedSpells(statBlock);
+      if (missingSpells.length)
+        reasons.push(`Spells not found in the PF2e compendium (listed on the spellcasting entry, not castable): ${missingSpells.join(', ')}.`);
       return {
         ...base,
-        stat_block: toCustomStatBlock(parse.block, notesHtml),
+        stat_block: statBlock,
         ai_metadata: {
           confidence: parse.confidence,
           extracted_at: new Date().toISOString(),
@@ -471,36 +483,76 @@ export function assembleBundle(
   const placeholderActorCount = actors.length - compendiumActorCount - parsedActorCount;
 
   // ----- Items -----
-  const items: Bundle['items']['entities'] = extracted.items.map((item) => ({
-    slug: slugs.next(`item-${item.name}`),
-    name: item.name,
-    // Phase 1 defaults to 'equipment' since the AI doesn't yet classify item
-    // type. Phase 2 will map "kind" hints from the extraction into proper
-    // categories (magic_item, consumable, etc).
-    category: 'equipment',
-    folder: chapterFolderFor('item', item.chapter_slug),
-    data: {
-      kind: 'custom',
-      item_type: 'equipment',
-      level: 0,
-      rarity: 'common',
-      traits: [],
-      bulk: 'L',
-      price_cp: 0,
-      description_html: `<p>${escapeHtml(item.description)}</p>${
-        item.kind ? `<p><em>Type: ${escapeHtml(item.kind)}</em></p>` : ''
-      }`,
-      effects: [],
-      requires_investiture: false,
-    } as Bundle['items']['entities'][number]['data'],
-    ai_metadata: {
-      confidence: 0.5,
-      extracted_at: new Date().toISOString(),
-      prompt_version: 'worker-phase-1',
-      review_required: false,
-      review_reasons: [],
-    },
-  }));
+  // v0.2.1: items that match PF2e's equipment pack become compendium-refs
+  // (with runes / precious material when printed that way) carrying the
+  // adventure's description; the rest stay custom placeholders.
+  const ITEM_CATEGORY: Record<string, Bundle['items']['entities'][number]['category']> = {
+    weapon: 'weapon',
+    armor: 'armor',
+    shield: 'armor',
+    consumable: 'consumable',
+    treasure: 'treasure',
+  };
+  const items: Bundle['items']['entities'] = extracted.items.map((item) => {
+    const base = {
+      slug: slugs.next(`item-${item.name}`),
+      name: item.name,
+      folder: chapterFolderFor('item', item.chapter_slug),
+    };
+    const notesHtml = `<p>${escapeHtml(item.description)}</p>`;
+    const plan: ItemPlan | null = opts.compendium ? planItem(opts.compendium, item) : null;
+    if (plan) {
+      const match = plan.kind === 'match' ? plan.match : plan.base;
+      const data =
+        plan.kind === 'match'
+          ? { kind: 'compendium-ref' as const, uuid: match.uuid, version_pin: versionPin, ...(plan.material ? { material: plan.material } : {}), notes_html: notesHtml }
+          : {
+              kind: 'compendium-ref-with-runes' as const,
+              base_uuid: match.uuid,
+              runes: plan.runes.map((r) => ({ type: r.type, uuid: r.uuid, ...(r.rank ? { rank: r.rank } : {}) })),
+              name_override: item.name,
+              ...(plan.material ? { material: plan.material } : {}),
+              notes_html: notesHtml,
+            };
+      return {
+        ...base,
+        category: ITEM_CATEGORY[match.type] ?? 'equipment',
+        data,
+        ai_metadata: {
+          confidence: plan.reviewReasons.length ? 0.7 : 0.9,
+          extracted_at: new Date().toISOString(),
+          prompt_version: plan.kind === 'runes' ? 'items-runes-1' : 'items-match-1',
+          review_required: plan.reviewReasons.length > 0,
+          review_reasons: plan.reviewReasons,
+        },
+      } as Bundle['items']['entities'][number];
+    }
+    return {
+      ...base,
+      // No compendium twin: a placeholder the GM fills in.
+      category: 'equipment',
+      data: {
+        kind: 'custom',
+        item_type: 'equipment',
+        level: 0,
+        rarity: 'common',
+        traits: [],
+        bulk: 'L',
+        price_cp: 0,
+        description_html: `${notesHtml}${item.kind ? `<p><em>Type: ${escapeHtml(item.kind)}</em></p>` : ''}`,
+        effects: [],
+        requires_investiture: false,
+      } as Bundle['items']['entities'][number]['data'],
+      ai_metadata: {
+        confidence: 0.5,
+        extracted_at: new Date().toISOString(),
+        prompt_version: 'worker-phase-1',
+        review_required: false,
+        review_reasons: [],
+      },
+    } as Bundle['items']['entities'][number];
+  });
+  const compendiumItemCount = items.filter((i) => i.data.kind !== 'custom').length;
 
   // ----- Scenes -----
   // Phase 1 doesn't extract map images, and the contract requires every scene
@@ -576,9 +628,9 @@ export function assembleBundle(
         review_needed: actors.filter((a) => a.ai_metadata?.review_required).length,
       },
       items: {
-        compendium: 0,
-        custom: items.length,
-        review_needed: 0,
+        compendium: compendiumItemCount,
+        custom: items.length - compendiumItemCount,
+        review_needed: items.filter((i) => i.ai_metadata?.review_required).length,
       },
       ai_tokens: opts.aiTokens
         ? {

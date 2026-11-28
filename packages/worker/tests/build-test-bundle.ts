@@ -315,6 +315,60 @@ const actors: Bundle['actors']['entities'] = [
     ...META,
   },
 
+  // -- Parsed spellcasting — every entry type, linked to spells-srd UUIDs. ----
+  {
+    slug: 'parsed-caster',
+    name: 'Parsed Test — Spellcaster',
+    category: 'npc',
+    folder: FOLDERS.actors,
+    stat_block: {
+      ...customStatBlock({ level: 9, size: 'medium', rarity: 'common', traits: ['human', 'humanoid'], languages: ['Common'] }),
+      spellcasting: [
+        {
+          name: 'Primal Innate Spells',
+          tradition: 'primal',
+          type: 'innate',
+          dc: 27,
+          attack_bonus: 19,
+          spells: {
+            '5': [
+              { name: 'fireball', uuid: requireUuid(INDEX.findSpell('fireball')), uses: 2 },
+              { name: 'truespeech', uuid: requireUuid(INDEX.findSpell('truespeech')), note: 'constant' },
+            ],
+            '2': [{ name: 'invisibility', uuid: requireUuid(INDEX.findSpell('invisibility')), note: 'at will; self only' }],
+            '0': [{ name: 'detect magic', uuid: requireUuid(INDEX.findSpell('detect magic')) }],
+            '1': [{ name: 'zenith imaginary spell' }],
+          },
+        },
+        {
+          name: 'Arcane Prepared Spells',
+          tradition: 'arcane',
+          type: 'prepared',
+          dc: 26,
+          attack_bonus: 18,
+          spells: { '3': [{ name: 'haste', uuid: requireUuid(INDEX.findSpell('haste')), uses: 2 }] },
+        },
+        {
+          name: 'Occult Spontaneous Spells',
+          tradition: 'occult',
+          type: 'spontaneous',
+          dc: 25,
+          rank_slots: { '1': 3 },
+          spells: { '1': [{ name: 'soothe', uuid: requireUuid(INDEX.findSpell('soothe')) }] },
+        },
+        {
+          name: 'Cleric Domain Spells',
+          tradition: 'divine',
+          type: 'focus',
+          dc: 25,
+          focus_points: 1,
+          spells: { '5': [{ name: "death's call", uuid: requireUuid(INDEX.findSpell("death's call")) }] },
+        },
+      ],
+    },
+    ...META,
+  },
+
   // -- Compendium refs (Phase 2B) — UUIDs from the pinned compendium index ----
   {
     slug: 'compendium-npc',
@@ -396,6 +450,56 @@ const items: Bundle['items']['entities'] = [
       review_required: false,
       review_reasons: [],
     },
+  },
+  // -- Compendium items (v0.2.1): runes, material, notes overlay. Two rune
+  //    items share the Rapier base, so edits to one must not leak into the other.
+  ...[
+    { slug: 'item-runes-flaming', name: 'Item Test — +2 Greater Striking Flaming Rapier', potency: 2, striking: 2, property: 'Flaming' },
+    { slug: 'item-runes-plain', name: 'Item Test — +1 Striking Rapier', potency: 1, striking: 1, property: null },
+  ].map((r) => ({
+    slug: r.slug,
+    name: r.name,
+    category: 'weapon' as const,
+    folder: FOLDERS.items,
+    data: {
+      kind: 'compendium-ref-with-runes' as const,
+      base_uuid: requireUuid(INDEX.findItemExact('Rapier')),
+      runes: [
+        { type: 'weapon-potency' as const, uuid: requireUuid(INDEX.findItemExact(`Weapon Potency (+${r.potency})`)), rank: r.potency },
+        { type: 'striking' as const, uuid: requireUuid(INDEX.findItemExact(r.striking === 2 ? 'Striking (Greater)' : 'Striking')), rank: r.striking },
+        ...(r.property ? [{ type: 'property' as const, uuid: requireUuid(INDEX.findItemExact(r.property)) }] : []),
+      ],
+      name_override: r.name,
+      notes_html: `<p>ZENITH-ITEM-NOTES ${r.slug}</p>`,
+    },
+    ...META,
+  })),
+  {
+    slug: 'item-material',
+    name: 'Item Test — Low-Grade Silver Dagger',
+    category: 'weapon',
+    folder: FOLDERS.items,
+    data: {
+      kind: 'compendium-ref',
+      uuid: requireUuid(INDEX.findItemExact('Dagger')),
+      version_pin: `pf2e@${INDEX.version}`,
+      material: { type: 'silver', grade: 'low' },
+      notes_html: '<p>ZENITH-ITEM-NOTES item-material</p>',
+    },
+    ...META,
+  },
+  {
+    slug: 'item-potion',
+    name: 'Item Test — Lesser Healing Potion',
+    category: 'consumable',
+    folder: FOLDERS.items,
+    data: {
+      kind: 'compendium-ref',
+      uuid: requireUuid(INDEX.findItemExact('Healing Potion (Lesser)')),
+      version_pin: `pf2e@${INDEX.version}`,
+      notes_html: '<p>ZENITH-ITEM-NOTES item-potion</p>',
+    },
+    ...META,
   },
 ];
 

@@ -13,6 +13,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { assembleBundle, validateAndZip } from '../src/bundle/assemble.js';
 import { ExtractedAdventureZ } from '../src/pipeline/extractAdventure.js';
 import { scanStatBlocks } from '../src/statblock/scan.js';
+import { CompendiumIndex } from '../src/compendium/index.js';
 
 const args = process.argv.slice(2);
 const get = (k: string) => args[args.indexOf(`--${k}`) + 1]!;
@@ -25,7 +26,7 @@ const npcs = blocks
   .map((b) => ({ name: b.name, role: 'Stat block test', description: `Parsed from the ${b.form} block.`, level: b.level, category: 'creature' }));
 
 const extracted = ExtractedAdventureZ.parse({ title: get('title'), synopsis: 'Parser end-to-end test.', npcs });
-const bundle = assembleBundle(extracted, { pdfBytes: new TextEncoder().encode(text), pdfText: text });
+const bundle = assembleBundle(extracted, { pdfBytes: new TextEncoder().encode(text), pdfText: text, spellIndex: CompendiumIndex.load() });
 const { zip, warnings } = validateAndZip(bundle);
 writeFileSync(get('out'), zip);
 const parsed = bundle.actors.entities.filter((a) => a.ai_metadata?.prompt_version === 'statblock-regex-1').length;

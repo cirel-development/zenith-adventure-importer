@@ -142,6 +142,12 @@ const PF2eSpellcastingSchema = z.object({
   type: z.enum(['prepared', 'spontaneous', 'innate', 'focus']),
   dc: z.number().int(),
   attack_bonus: z.number().int().optional(),
+  // Entry name as printed, e.g. "Divine Innate Spells", "Cleric Domain Spells".
+  name: z.string().optional(),
+  // Focus entries: the creature's Focus Point pool.
+  focus_points: z.number().int().nonnegative().optional(),
+  // Spontaneous entries: slots per rank, keyed like `spells`.
+  rank_slots: z.record(z.string(), z.number().int().nonnegative()).optional(),
   // Spell list keyed by level. "0" = cantrips. Each spell either references the
   // compendium or is a custom adventure spell.
   spells: z.record(
@@ -152,6 +158,10 @@ const PF2eSpellcastingSchema = z.object({
         uuid: CompendiumUuidSchema.optional(),
         // For prepared casters: how many slots of this level. For spontaneous: spells known.
         slots: z.number().int().nonnegative().optional(),
+        // Printed "(×N)": casts per day (innate) or times prepared (prepared).
+        uses: z.number().int().positive().optional(),
+        // Printed restrictions, e.g. "at will", "constant", "self only".
+        note: z.string().optional(),
       }),
     ),
   ),

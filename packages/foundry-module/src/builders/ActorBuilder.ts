@@ -18,6 +18,8 @@ import {
   toPf2eSenses,
   toPf2eSize,
   toPf2eSkillSlug,
+  toPf2eSpellLabel,
+  toPf2eSpellPlacement,
   toPf2eStrikeTraits,
 } from './pf2eMappings.js';
 
@@ -179,6 +181,20 @@ export class ActorBuilder {
       );
     }
 
+    // Spells are copied from the compendium and are the newest embedded data;
+    // drop them before giving up on the strikes and abilities too.
+    const items = Array.isArray(data['items']) ? (data['items'] as { type?: string }[]) : [];
+    const withoutSpells = items.filter((i) => i.type !== 'spell' && i.type !== 'spellcastingEntry');
+    if (withoutSpells.length > 0 && withoutSpells.length < items.length) {
+      try {
+        const created = await Actor.create({ ...data, items: withoutSpells });
+        log.warn(`actor "${slug}" created without spells — GM must add them manually`);
+        return created;
+      } catch (err) {
+        log.warn(`actor "${slug}" still rejected without spells:`, (err as Error)?.message ?? String(err));
+      }
+    }
+
     // Retry path — strip the items array. Most validation errors come from
     // trait/schema mismatches on the embedded melee/action items.
     try {
@@ -307,11 +323,11 @@ export class ActorBuilder {
   // Custom NPC/creature path — full PF2e schema
   // ----------------------------------------------------------------------------
 
-  private buildCustom(
+  private async buildCustom(
     entry: ActorEntry,
     statBlock: Extract<StatBlock, { kind: 'custom' }>,
     assetMap: AssetMap,
-  ): Record<string, unknown> {
+  ): Promise<Record<string, unknown>> {
     // Hazards have an entirely different PF2e schema than NPCs. We could keep
     // forcing them through the NPC schema, but the Foundry UI then renders
     // them as Creature 2 sheets which loses the trap/disable/reset semantics
@@ -330,6 +346,9 @@ export class ActorBuilder {
     // does (creatures and NPCs are both `type: 'npc'` in their data files).
     const system = this.buildPF2eNpcSystem(statBlock);
     const items = this.buildPF2eEmbeddedItems(statBlock, assetMap);
+    items.push(...(await this.buildSpellcastingItems(statBlock)));
+    const focus = statBlock.spellcasting.reduce((n, e) => n + (e.focus_points ?? 0), 0);
+    if (focus > 0) system['resources'] = { focus: { max: Math.min(3, focus), value: Math.min(3, focus) } };
 
     return {
       type: this.npcOrCharacterType(entry.category),
@@ -563,6 +582,68 @@ export class ActorBuilder {
       );
     }
 
+    return items;
+  }
+
+  /**
+   * Spellcasting entries and their spells (PF2e 8.x). Each spell is copied
+   * from its compendium UUID and pointed at its entry by _id, so the ids are
+   * set here and kept by Actor.create. Spells without a UUID, or whose UUID
+   * doesn't resolve, are listed in the entry's description instead: a spell
+   * item without real data would fail validation and cost the actor all its
+   * embedded items (see tryCreateActor).
+   */
+  private async buildSpellcastingItems(sb: Extract<StatBlock, { kind: 'custom' }>): Promise<unknown[]> {
+    const items: unknown[] = [];
+    const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1);
+    for (const e of sb.spellcasting) {
+      const entryId = foundry.utils.randomID();
+      const slots: Record<string, { max: number; value?: number; prepared?: { id: string }[] }> = {};
+      const unresolved: string[] = [];
+      for (const [key, list] of Object.entries(e.spells)) {
+        const rank = Number(key);
+        for (const sp of list) {
+          const res = sp.uuid ? await this.compendium.resolveSource(sp.uuid, sp.name) : null;
+          if (!res || res.source['type'] !== 'spell') {
+            unresolved.push(sp.name);
+            continue;
+          }
+          // resolveSource caches; never mutate the shared copy.
+          const src = JSON.parse(JSON.stringify(res.source)) as Record<string, any>;
+          const id = foundry.utils.randomID();
+          const label = toPf2eSpellLabel(sp.note);
+          const { location, preparedCount } = toPf2eSpellPlacement(entryId, e.type, rank, sp.uses);
+          src['_id'] = id;
+          if (label) src['name'] = `${src['name']} (${label})`;
+          src['system'] = { ...(src['system'] ?? {}), location };
+          src['_stats'] = { ...(src['_stats'] ?? {}), compendiumSource: res.resolvedUuid };
+          items.push(src);
+          if (preparedCount > 0) {
+            const slot = (slots[`slot${rank}`] ??= { max: 0, prepared: [] });
+            for (let i = 0; i < preparedCount; i++) slot.prepared!.push({ id });
+            slot.max = slot.prepared!.length;
+          }
+        }
+      }
+      if (e.type === 'spontaneous') for (const [k, n] of Object.entries(e.rank_slots ?? {})) slots[`slot${k}`] = { max: n, value: n };
+      items.push({
+        _id: entryId,
+        type: 'spellcastingEntry',
+        name: e.name ?? `${cap(e.tradition)} ${cap(e.type)} Spells`,
+        system: {
+          tradition: { value: e.tradition },
+          prepared: { value: e.type, flexible: false },
+          // PF2e stores the spell attack modifier in spelldc.value.
+          spelldc: { dc: e.dc, value: e.attack_bonus ?? e.dc - 8, mod: 0 },
+          slots,
+          showSlotlessLevels: { value: false },
+          autoHeightenLevel: { value: null },
+          description: {
+            value: unresolved.length ? `<p>Not found in the PF2e compendium (add by hand): ${unresolved.join(', ')}</p>` : '',
+          },
+        },
+      });
+    }
     return items;
   }
 

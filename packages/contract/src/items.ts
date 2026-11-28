@@ -29,8 +29,18 @@ export type ItemCategory = z.infer<typeof ItemCategorySchema>;
 // Compendium reference variant — most items match
 // ============================================================================
 
+// Optional on both compendium variants (v0.2.1, additive):
+//   material   — PF2e precious material on the base item ("low-grade silver")
+//   notes_html — the adventure's own text, appended to the item description
+const PreciousMaterialSchema = z.object({
+  type: z.string(), // PF2e slug: silver, cold-iron, adamantine, dawnsilver ...
+  grade: z.enum(['low', 'standard', 'high']),
+});
+
 const CompendiumRefItemDataSchema = z.object({
   kind: z.literal('compendium-ref'),
+  material: PreciousMaterialSchema.optional(),
+  notes_html: RefContentSchema.optional(),
   uuid: CompendiumUuidSchema,
   version_pin: z
     .string()
@@ -64,6 +74,8 @@ const RuneAppliedItemDataSchema = z.object({
   base_uuid: CompendiumUuidSchema, // base weapon or armor
   runes: z.array(PF2eRuneSchema).min(1),
   name_override: z.string().optional(),
+  material: PreciousMaterialSchema.optional(),
+  notes_html: RefContentSchema.optional(),
 });
 
 // ============================================================================

@@ -48,7 +48,7 @@ export function normalizeName(name: string): string {
     .replace(/^the /, '');
 }
 
-const GRADES = ['minor', 'lesser', 'moderate', 'greater', 'major', 'true'];
+export const GRADES = ['minor', 'lesser', 'moderate', 'greater', 'major', 'true'];
 
 /**
  * Name forms to try for an item, most specific first:
@@ -120,6 +120,11 @@ export class CompendiumIndex {
       if (hit) return { ...hit, variant };
     }
     return null;
+  }
+
+  /** One exact name in the equipment pack, no variants (see compendium/items.ts). */
+  findItemExact(name: string): CompendiumMatch | null {
+    return this.best(name, (e) => this.packs[e[2]]!.name === 'equipment-srd', {});
   }
 
   findSpell(name: string): CompendiumMatch | null {

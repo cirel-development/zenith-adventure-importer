@@ -19,6 +19,7 @@ import { planActorMatches } from '../compendium/match.js';
 import { indexBlocks, linkStatBlock } from './link.js';
 import { normalizeDashes, scanStatBlocks } from './scan.js';
 import type { ParsedStatBlock } from './parse.js';
+import { extractSpellcasting } from './spells.js';
 
 export const FALLBACK_THRESHOLD = 0.7;
 export const FALLBACK_TOOL_NAME = 'submit_stat_blocks';
@@ -265,7 +266,10 @@ export function parseFallbackAnswer(data: unknown): Map<string, ParsedStatBlock>
           damage: s.damage.map((d) => ({ formula: d.formula.replace(/\s/g, ''), type: d.type, persistent: d.persistent })),
           effectOnly: s.damage.length === 0,
         })),
-        abilitiesText: b.abilitiesText,
+        ...(() => {
+          const { entries, rest } = extractSpellcasting(b.abilitiesText);
+          return { spellcasting: entries, abilitiesText: rest };
+        })(),
         defensiveText: '',
       },
     ]),
@@ -295,7 +299,10 @@ export function mergeFallback(regex: ParsedStatBlock, ai: ParsedStatBlock): Pars
     resistances: list(regex.resistances, ai.resistances),
     speeds: pick(regex.speeds, ai.speeds),
     strikes: list(regex.strikes, ai.strikes),
-    abilitiesText: regex.abilitiesText || ai.abilitiesText,
+    // Spell entries travel with the ability text they were cut from.
+    ...(regex.abilitiesText || regex.spellcasting.length
+      ? { abilitiesText: regex.abilitiesText, spellcasting: regex.spellcasting }
+      : { abilitiesText: ai.abilitiesText, spellcasting: ai.spellcasting }),
   };
 }
 

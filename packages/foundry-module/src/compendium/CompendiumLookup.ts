@@ -60,10 +60,14 @@ export class CompendiumLookup {
     fallbackName?: string,
   ): Promise<CompendiumResolution | null> {
     const cacheKey = this.makeCacheKey(uuid, fallbackName);
-    if (this.cache.has(cacheKey)) {
-      return this.cache.get(cacheKey) ?? null;
-    }
+    if (!this.cache.has(cacheKey)) this.cache.set(cacheKey, await this.lookup(uuid, fallbackName));
+    // Callers edit the source they get (names, runes, overlays); hand each a
+    // copy so the same compendium entry used twice doesn't share edits.
+    const hit = this.cache.get(cacheKey) ?? null;
+    return hit ? { ...hit, source: JSON.parse(JSON.stringify(hit.source)) as Record<string, unknown> } : null;
+  }
 
+  private async lookup(uuid: string, fallbackName?: string): Promise<CompendiumResolution | null> {
     // Pass 1: try the UUID directly
     const direct = await this.tryUuid(uuid);
     if (direct) {
@@ -73,7 +77,6 @@ export class CompendiumLookup {
         resolvedUuid: uuid,
         driftWarning: false,
       };
-      this.cache.set(cacheKey, result);
       return result;
     }
 
@@ -84,7 +87,6 @@ export class CompendiumLookup {
         log.warn(
           `compendium drift: "${fallbackName}" matched by name (UUID ${uuid} not found, used ${named.resolvedUuid})`,
         );
-        this.cache.set(cacheKey, named);
         return named;
       }
     }
@@ -94,7 +96,6 @@ export class CompendiumLookup {
       `compendium miss: ${uuid}` +
         (fallbackName ? ` (no entry named "${fallbackName}" in pack either)` : ''),
     );
-    this.cache.set(cacheKey, null);
     return null;
   }
 

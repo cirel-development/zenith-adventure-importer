@@ -19,9 +19,11 @@
     "build:index": "tsx scripts/build-compendium-index.ts",
     "test:index": "tsx tests/compendium-index.check.ts",
     "test:match": "tsx tests/match.check.ts",
+    "test:items": "tsx tests/items.check.ts",
     "test:statblocks": "tsx tests/statblock-accuracy.ts",
     "test:statblock": "tsx tests/statblock.check.ts",
     "test:link": "tsx tests/link.check.ts",
+    "test:spells": "tsx tests/spells.check.ts",
     "test:fallback": "tsx tests/fallback.check.ts"
   },
   "dependencies": {
