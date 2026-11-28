@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.2.2
+
+Same requirements: Foundry VTT v14 (verified 14.371) and the PF2e system 8.7.x. Bundles made for
+earlier versions still import.
+
+### Fixes
+- **Scenes now show their map on Foundry v14.** v14 keeps a scene's map on its level, and every
+  scene imported with v0.2.0 or v0.2.1 came in blank. Walls, doors, lights, sounds and map notes
+  were already fine.
+- The map-note cleanup no longer uses syntax that v14 deprecates and v16 removes.
+- The progress window's title now changes ("Undoing...", "Undo Complete"); it used to read
+  "Importing..." throughout.
+
+### Special abilities as actions
+- Abilities printed in a stat block become PF2e actions with their action cost (including "1 to 3
+  actions"), traits, frequency and the sheet section they belong to, instead of text in the Notes
+  tab. DCs and damage in their text become clickable rolls.
+- Troops and swarms, whose attacks are actions rather than Strikes, now import with all of them.
+
+### Hazards
+- Hazard stat blocks that aren't in the PF2e compendium are read from the PDF: Stealth, a
+  clickable Disable check, AC, saves, Hardness, HP, immunities, reactions, Strikes, Routine and
+  Reset. Hazards whose end in the PDF was unclear are flagged for review.
+
+### Pregenerated characters
+- An adventure's pregens import as PF2e's own pregenerated characters (with class, ancestry, gear
+  and spells), the build made for that adventure, with friendly linked tokens and the adventure's
+  text in Campaign Notes. Familiars come too, flagged so the GM can set their master.
+
+### Manage Imports
+- Module Settings → Manage Imports lists every adventure imported into the world, with Undo and
+  Forget (for imports already deleted by hand). It is also linked from the import dialog.
+
 ## v0.2.1
 
 Same requirements as v0.2.0: Foundry VTT v14 (verified 14.371) and the PF2e system 8.7.x. Bundles
