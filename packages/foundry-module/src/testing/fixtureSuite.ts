@@ -282,6 +282,24 @@ export const cases: TestCase[] = [
     },
   },
   {
+    name: 'parsed gear: printed items become PF2e inventory with runes, material, quantity',
+    run: (s) => {
+      const a = actor(s, 'parsed-full');
+      const gear = a.items.filter((i: any) => ['weapon', 'armor', 'consumable'].includes(i.type));
+      eq(gear.map((i: any) => i.name).sort(), ['+1 Striking Scimitar', 'Healing Potion (Lesser)', 'Javelin', 'Leather Armor', 'Low-Grade Silver Dagger'], 'inventory names');
+      const by = (n: string) => gear.find((i: any) => i.name === n);
+      const scimitar = by('+1 Striking Scimitar');
+      eq([src(scimitar, 'system.runes.potency'), src(scimitar, 'system.runes.striking')], [1, 1], 'scimitar runes');
+      eq(scimitar.system.equipped?.carryType, 'held', 'weapon is held');
+      eq(by('Leather Armor').system.equipped?.carryType, 'worn', 'armor is worn');
+      eq(src(by('Javelin'), 'system.quantity'), 4, 'javelin quantity');
+      ok(String(src(by('Javelin'), 'system.description.value')).includes('bundled'), 'printed note kept');
+      eq(src(by('Low-Grade Silver Dagger'), 'system.material'), { type: 'silver', grade: 'low' }, 'dagger material');
+      eq(src(by('Healing Potion (Lesser)'), 'system.quantity'), 2, 'potion quantity');
+      eq(a.items.filter((i: any) => i.type === 'melee').length, 3, 'stat-block strikes unchanged');
+    },
+  },
+  {
     name: 'parsed spells: innate entry with heightened ranks, uses, notes, cantrips',
     run: (s) => {
       const a = actor(s, 'parsed-caster');

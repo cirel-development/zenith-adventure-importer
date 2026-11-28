@@ -62,6 +62,12 @@ export class RuneApplicator {
       };
     }
 
+    await this.applyToSource(base, runes);
+    return base;
+  }
+
+  /** Write runes into an already-resolved weapon/armor source (PF2e 8.x system.runes). */
+  async applyToSource(base: Record<string, unknown>, runes: PF2eRune[]): Promise<void> {
     const system = ((base['system'] as Record<string, unknown>) ??= {});
     const runesField = ((system['runes'] as Record<string, unknown>) ??= {});
     const propertyRunes: string[] = [];
@@ -105,6 +111,5 @@ export class RuneApplicator {
       flags['zenith-adventure-importer'] = { ...(flags['zenith-adventure-importer'] ?? {}), skippedRunes: skipped };
     }
 
-    return base;
   }
 }

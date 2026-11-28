@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PF2eRuneSchema, PreciousMaterialSchema } from './items.js';
 import {
   SlugSchema,
   FolderPathSchema,
@@ -173,6 +174,13 @@ const PF2eInventoryItemSchema = z.object({
   uuid: CompendiumUuidSchema.optional(),
   quantity: z.number().int().positive().default(1),
   equipped: z.boolean().default(false),
+  // v0.2.2, optional: the printed name ("+1 striking scimitar"), runes and
+  // precious material applied on top of the compendium `uuid` base, and a
+  // printed note ("10 bolts").
+  name: z.string().optional(),
+  runes: z.array(PF2eRuneSchema).optional(),
+  material: PreciousMaterialSchema.optional(),
+  note: z.string().optional(),
 });
 
 const CustomStatBlockSchema = z.object({

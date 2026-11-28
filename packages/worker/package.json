@@ -23,6 +23,7 @@
     "test:statblocks": "tsx tests/statblock-accuracy.ts",
     "test:statblock": "tsx tests/statblock.check.ts",
     "test:link": "tsx tests/link.check.ts",
+    "test:inventory": "tsx tests/inventory.check.ts",
     "test:spells": "tsx tests/spells.check.ts",
     "test:fallback": "tsx tests/fallback.check.ts"
   },

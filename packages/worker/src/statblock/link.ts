@@ -13,6 +13,8 @@ import { normalizeName, type CompendiumIndex } from '../compendium/index.js';
 import type { ScannedBlock } from './scan.js';
 import { parseStatBlock, type ParseResult, type ParsedStatBlock } from './parse.js';
 import { LEGACY_SPELL_NAMES, type ParsedSpellcasting } from './spells.js';
+import { parseInventoryLine, singular, type InventoryLine } from './inventory.js';
+import { planItem, type ItemPlan } from '../compendium/items.js';
 
 type CustomStatBlock = Extract<Bundle['actors']['entities'][number]['stat_block'], { kind: 'custom' }>;
 
@@ -149,6 +151,35 @@ export function toContractSpellcasting(entries: ParsedSpellcasting[], resolve?: 
   });
 }
 
+type InventoryEntry = CustomStatBlock['inventory'][number];
+/** One printed inventory line -> a compendium inventory entry, or null (stays text). */
+export type ItemResolver = (line: InventoryLine) => InventoryEntry | null;
+
+const titleCase = (s: string) => s.replace(/(^|\s)([a-z])/g, (_m, sp: string, c: string) => sp + c.toUpperCase());
+
+export function inventoryResolver(idx: CompendiumIndex): ItemResolver {
+  const plan = (name: string): ItemPlan | null => planItem(idx, { name });
+  return (line) => {
+    // "+1 striking jambiya (functions as a dagger)": the stand-in takes the base's place.
+    const standInName = line.standIn ? line.name.replace(/[a-z'-]+$/i, line.standIn) : null;
+    const p =
+      plan(line.name) ??
+      (line.quantity > 1 || /s$/.test(line.name) ? plan(singular(line.name)) : null) ??
+      (standInName ? plan(standInName) ?? plan(line.standIn!) : null);
+    if (!p) return null;
+    const base = p.kind === 'match' ? p.match : p.base;
+    return {
+      uuid: base.uuid,
+      quantity: line.quantity,
+      equipped: ['weapon', 'armor', 'shield'].includes(base.type),
+      ...(p.kind === 'runes' || line.standIn ? { name: titleCase(line.name) } : {}),
+      ...(p.kind === 'runes' ? { runes: p.runes.map((r) => ({ type: r.type, uuid: r.uuid, ...(r.rank ? { rank: r.rank } : {}) })) } : {}),
+      ...(p.material ? { material: p.material } : {}),
+      ...(line.note ? { note: line.note } : {}),
+    };
+  };
+}
+
 /** Spell names in a custom stat block that have no compendium UUID. */
 export function unresolvedSpells(sb: CustomStatBlock): string[] {
   return sb.spellcasting.flatMap((e) => Object.values(e.spells).flat().filter((s) => !s.uuid).map((s) => s.name));
@@ -158,9 +189,24 @@ export function unresolvedSpells(sb: CustomStatBlock): string[] {
  * Contract custom stat block from a parse. Fields the parse could not read
  * fall back to the level-based placeholders, and are listed in `missing`.
  */
-export function toCustomStatBlock(p: ParsedStatBlock, notesHtml: string, resolveSpell?: SpellResolver): CustomStatBlock {
+export function toCustomStatBlock(
+  p: ParsedStatBlock,
+  notesHtml: string,
+  resolveSpell?: SpellResolver,
+  resolveItem?: ItemResolver,
+): CustomStatBlock {
   const lvl = p.level;
-  const abilityText = [p.defensiveText, p.abilitiesText].filter(Boolean).join(' ');
+  // Printed items that match the compendium become inventory; the rest (and
+  // any ability text that ran into the list) stay as text in the notes.
+  const { entries: lines, leftover } = resolveItem ? parseInventoryLine(p.items) : { entries: [], leftover: '' };
+  const inventory: InventoryEntry[] = [];
+  const unmatchedItems: string[] = resolveItem ? [] : p.items;
+  for (const line of lines) {
+    const hit = resolveItem!(line);
+    if (hit) inventory.push(hit);
+    else unmatchedItems.push(line.printed);
+  }
+  const abilityText = [p.defensiveText, leftover, p.abilitiesText].filter(Boolean).join(' ');
   return {
     kind: 'custom',
     level: Math.max(-1, Math.min(30, lvl)),
@@ -192,10 +238,10 @@ export function toCustomStatBlock(p: ParsedStatBlock, notesHtml: string, resolve
     })),
     actions: [],
     spellcasting: toContractSpellcasting(p.spellcasting, resolveSpell),
-    inventory: [],
+    inventory,
     tactics_html:
       notesHtml +
       (abilityText ? `<h3>Abilities (from the stat block)</h3><p>${escapeHtml(abilityText)}</p>` : '') +
-      (p.items.length ? `<p><strong>Items</strong> ${escapeHtml(p.items.join(', '))}</p>` : ''),
+      (unmatchedItems.length ? `<p><strong>Items</strong> ${escapeHtml(unmatchedItems.join(', '))}</p>` : ''),
   };
 }

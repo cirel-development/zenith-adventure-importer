@@ -311,6 +311,23 @@ const actors: Bundle['actors']['entities'] = [
         { name: 'thorn', type: 'ranged', attack_bonus: 10, damage_formula: '1d6 piercing', traits: ['range increment 30 feet'] },
         { name: 'seed pod', type: 'ranged', attack_bonus: 10, damage_formula: '', effects: ['sickened 1'], traits: ['thrown 20 feet'] },
       ],
+      // Printed gear (v0.2.2): runes, quantity + note, material, plain armor.
+      inventory: [
+        {
+          uuid: requireUuid(INDEX.findItemExact('Scimitar')),
+          quantity: 1,
+          equipped: true,
+          name: '+1 Striking Scimitar',
+          runes: [
+            { type: 'weapon-potency', uuid: requireUuid(INDEX.findItemExact('Weapon Potency (+1)')), rank: 1 },
+            { type: 'striking', uuid: requireUuid(INDEX.findItemExact('Striking')), rank: 1 },
+          ],
+        },
+        { uuid: requireUuid(INDEX.findItemExact('Javelin')), quantity: 4, equipped: true, note: 'bundled' },
+        { uuid: requireUuid(INDEX.findItemExact('Dagger')), quantity: 1, equipped: true, name: 'Low-Grade Silver Dagger', material: { type: 'silver', grade: 'low' } },
+        { uuid: requireUuid(INDEX.findItemExact('Leather Armor')), quantity: 1, equipped: true },
+        { uuid: requireUuid(INDEX.findItemExact('Healing Potion (Lesser)')), quantity: 2, equipped: false },
+      ],
     },
     ...META,
   },

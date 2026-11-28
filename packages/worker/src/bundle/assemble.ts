@@ -10,7 +10,7 @@ import type { CompendiumIndex } from '../compendium/index.js';
 import { planActorMatches, type ActorMatchDecision } from '../compendium/match.js';
 import { planItem, type ItemPlan } from '../compendium/items.js';
 import { scanStatBlocks } from '../statblock/scan.js';
-import { indexBlocks, linkStatBlock, spellResolver, toCustomStatBlock, unresolvedSpells } from '../statblock/link.js';
+import { indexBlocks, inventoryResolver, linkStatBlock, spellResolver, toCustomStatBlock, unresolvedSpells } from '../statblock/link.js';
 import { scoreParsed, type ParsedStatBlock } from '../statblock/parse.js';
 import { normalizeName } from '../compendium/index.js';
 
@@ -57,7 +57,7 @@ export interface AssembleOptions {
    */
   compendium?: CompendiumIndex;
   /**
-   * Index used only to link parsed spells to spells-srd, for runs with
+   * Index used only to link parsed spells and printed items (inventory), for runs with
    * creature matching off. Defaults to `compendium`.
    */
   spellIndex?: CompendiumIndex;
@@ -280,6 +280,7 @@ export function assembleBundle(
   const versionPin = opts.compendium ? `pf2e@${opts.compendium.version}` : undefined;
   const spellIdx = opts.spellIndex ?? opts.compendium;
   const resolveSpell = spellIdx ? spellResolver(spellIdx) : undefined;
+  const resolveItem = spellIdx ? inventoryResolver(spellIdx) : undefined;
 
   const compendiumActor = (
     base: { slug: string; name: string; category: Bundle['actors']['entities'][number]['category']; folder: string },
@@ -357,7 +358,7 @@ export function assembleBundle(
       if (scanned.form === 'variant' && !linked.base && scanned.variantOf)
         reasons.push(`Variant of ${scanned.variantOf.name} (${scanned.variantOf.source}); fields the variant doesn't list are placeholders.`);
       if (parse.confidence < 0.7) reasons.push(`Low parse confidence (${parse.confidence}).`);
-      const statBlock = toCustomStatBlock(parse.block, notesHtml, resolveSpell);
+      const statBlock = toCustomStatBlock(parse.block, notesHtml, resolveSpell, resolveItem);
       const missingSpells = unresolvedSpells(statBlock);
       if (missingSpells.length)
         reasons.push(`Spells not found in the PF2e compendium (listed on the spellcasting entry, not castable): ${missingSpells.join(', ')}.`);

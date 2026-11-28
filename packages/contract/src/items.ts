@@ -32,7 +32,7 @@ export type ItemCategory = z.infer<typeof ItemCategorySchema>;
 // Optional on both compendium variants (v0.2.1, additive):
 //   material   — PF2e precious material on the base item ("low-grade silver")
 //   notes_html — the adventure's own text, appended to the item description
-const PreciousMaterialSchema = z.object({
+export const PreciousMaterialSchema = z.object({
   type: z.string(), // PF2e slug: silver, cold-iron, adamantine, dawnsilver ...
   grade: z.enum(['low', 'standard', 'high']),
 });
@@ -54,7 +54,7 @@ const CompendiumRefItemDataSchema = z.object({
 // ============================================================================
 
 // Runes get applied to a base item from the compendium (e.g. base "longsword" + striking rune)
-const PF2eRuneSchema = z.object({
+export const PF2eRuneSchema = z.object({
   // Type tells the builder where on the base item to apply this rune
   type: z.enum([
     'weapon-potency', // +1, +2, +3

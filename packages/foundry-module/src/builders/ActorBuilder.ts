@@ -8,6 +8,7 @@ import type { AssetMap } from '../pipeline/AssetUploader.js';
 import type { EntityRegistry } from '../pipeline/EntityRegistry.js';
 import type { CompendiumLookup } from '../compendium/CompendiumLookup.js';
 import { log } from '../log.js';
+import { RuneApplicator } from '../compendium/RuneApplicator.js';
 import {
   isLoreSkill,
   splitKnownDefenses,
@@ -56,10 +57,14 @@ const TOKEN_DISPOSITION_MAP = {
  * `name` and a warning flag. We don't fail the whole import on a single miss.
  */
 export class ActorBuilder {
+  private readonly runes: RuneApplicator;
+
   constructor(
     private readonly folders: FolderBuilder,
     private readonly compendium: CompendiumLookup,
-  ) {}
+  ) {
+    this.runes = new RuneApplicator(compendium);
+  }
 
   async build(
     bundle: Bundle,
@@ -181,17 +186,17 @@ export class ActorBuilder {
       );
     }
 
-    // Spells are copied from the compendium and are the newest embedded data;
-    // drop them before giving up on the strikes and abilities too.
+    // Spells and gear are copied from the compendium; drop them before giving
+    // up on the strikes, abilities and lore built from the stat block.
     const items = Array.isArray(data['items']) ? (data['items'] as { type?: string }[]) : [];
-    const withoutSpells = items.filter((i) => i.type !== 'spell' && i.type !== 'spellcastingEntry');
-    if (withoutSpells.length > 0 && withoutSpells.length < items.length) {
+    const ownItems = items.filter((i) => i.type === 'melee' || i.type === 'action' || i.type === 'lore');
+    if (ownItems.length > 0 && ownItems.length < items.length) {
       try {
-        const created = await Actor.create({ ...data, items: withoutSpells });
-        log.warn(`actor "${slug}" created without spells — GM must add them manually`);
+        const created = await Actor.create({ ...data, items: ownItems });
+        log.warn(`actor "${slug}" created without spells/gear — GM must add them manually`);
         return created;
       } catch (err) {
-        log.warn(`actor "${slug}" still rejected without spells:`, (err as Error)?.message ?? String(err));
+        log.warn(`actor "${slug}" still rejected without spells/gear:`, (err as Error)?.message ?? String(err));
       }
     }
 
@@ -347,6 +352,7 @@ export class ActorBuilder {
     const system = this.buildPF2eNpcSystem(statBlock);
     const items = this.buildPF2eEmbeddedItems(statBlock, assetMap);
     items.push(...(await this.buildSpellcastingItems(statBlock)));
+    items.push(...(await this.buildInventoryItems(statBlock)));
     const focus = statBlock.spellcasting.reduce((n, e) => n + (e.focus_points ?? 0), 0);
     if (focus > 0) system['resources'] = { focus: { max: Math.min(3, focus), value: Math.min(3, focus) } };
 
@@ -574,14 +580,59 @@ export class ActorBuilder {
       });
     }
 
-    // Inventory references — defer to the ItemBuilder's resolveItem in Pass 2+.
-    // For now, log if there's inventory and we'd need to handle it.
-    if (sb.inventory.length > 0) {
-      log.debug(
-        `actor has ${sb.inventory.length} inventory items — not yet wired to ItemBuilder, items skipped`,
-      );
-    }
+    return items;
+  }
 
+  /**
+   * Printed gear (v0.2.2): each inventory entry with a compendium UUID is
+   * copied onto the actor, with its runes, precious material, quantity and
+   * printed name. Weapons and shields are held while hands are free, the first
+   * armor is worn, bombs are carried. Entries that
+   * don't resolve are skipped (the worker keeps unmatched gear as text).
+   */
+  private async buildInventoryItems(sb: Extract<StatBlock, { kind: 'custom' }>): Promise<unknown[]> {
+    const items: unknown[] = [];
+    let handsFree = 2;
+    let armorWorn = false;
+    for (const inv of sb.inventory) {
+      if (!inv.uuid) continue;
+      const res = await this.compendium.resolveSource(inv.uuid, inv.name);
+      if (!res) {
+        log.warn(`inventory item ${inv.uuid} (${inv.name ?? '?'}) not found; skipped`);
+        continue;
+      }
+      const src = res.source as Record<string, any>;
+      if (inv.runes?.length) await this.runes.applyToSource(src, inv.runes);
+      const system = (src['system'] ??= {}) as Record<string, any>;
+      if (inv.material) {
+        const known = (CONFIG as any)?.PF2E?.preciousMaterials;
+        if (!known || inv.material.type in known) system['material'] = { type: inv.material.type, grade: inv.material.grade };
+      }
+      if (inv.name) src['name'] = inv.name;
+      system['quantity'] = inv.quantity;
+      if (inv.note) {
+        const description = (system['description'] ??= {}) as Record<string, unknown>;
+        const existing = typeof description['value'] === 'string' ? (description['value'] as string) : '';
+        description['value'] = `<p><em>${inv.note.replace(/</g, '&lt;')}</em></p>${existing}`;
+      }
+      // Hold weapons/shields while hands are free (two), wear the first armor;
+      // bombs and other consumable weapons are carried, not held.
+      if (inv.equipped) {
+        const type = src['type'];
+        const traits: string[] = system['traits']?.value ?? [];
+        const hands = system['usage']?.value === 'held-in-two-hands' ? 2 : 1;
+        const consumable = traits.includes('bomb') || traits.includes('consumable');
+        if ((type === 'weapon' || type === 'shield') && !consumable && handsFree >= hands) {
+          system['equipped'] = { carryType: 'held', handsHeld: hands };
+          handsFree -= hands;
+        } else if (type === 'armor' && !armorWorn) {
+          system['equipped'] = { carryType: 'worn', inSlot: true, handsHeld: 0 };
+          armorWorn = true;
+        }
+      }
+      src['_stats'] = { ...(src['_stats'] ?? {}), compendiumSource: res.resolvedUuid };
+      items.push(src);
+    }
     return items;
   }
 
