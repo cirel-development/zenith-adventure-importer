@@ -73,6 +73,9 @@ check('strike traits', toPf2eStrikeTraits(['agile', 'reach 10 feet', 'versatile 
   traits: ['agile', 'reach-10', 'versatile-s', 'deadly-d10', 'thrown-20'],
   range: { increment: 30, max: null },
 });
+// Found in the Rage of Elements import: "10-foot reach" word order, and the default 5 ft reach.
+check('reach word orders', toPf2eStrikeTraits(['10-foot reach', '15 feet reach', 'reach 20 ft.']).traits, ['reach-10', 'reach-15', 'reach-20']);
+check('5 ft reach is the default, no trait', toPf2eStrikeTraits(['reach 5 feet', 'agile']).traits, ['agile']);
 check('attack effects', toPf2eAttackEffects(['Grab', 'Improved Knockdown']), ['grab', 'improved-knockdown']);
 check('lore skill', [isLoreSkill('Farming Lore'), isLoreSkill('Athletics')], [true, false]);
 check('skill slugs', ['Arcane', 'Occult', 'Athletics'].map(toPf2eSkillSlug), ['arcana', 'occultism', 'athletics']);

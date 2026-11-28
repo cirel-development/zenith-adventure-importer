@@ -563,9 +563,13 @@ export class ActorBuilder {
     const items: unknown[] = [];
 
     // Strikes → "melee" type items in PF2e (ranged ones too: a range or a
-    // thrown-N trait makes PF2e treat them as ranged).
+    // thrown-N trait makes PF2e treat them as ranged). Traits PF2e doesn't
+    // list for NPC attacks are dropped (Foundry would warn and drop them).
+    const attackTraits = keysOf((CONFIG as any)?.PF2E?.npcAttackTraits);
     for (const strike of sb.strikes) {
-      const { traits, range } = toPf2eStrikeTraits(strike.traits);
+      const mapped = toPf2eStrikeTraits(strike.traits);
+      const range = mapped.range;
+      const traits = attackTraits ? mapped.traits.filter((t) => attackTraits.has(t)) : mapped.traits;
       const rolls = toPf2eDamageRolls(strike.damage_formula);
       const effectOnly = rolls.length === 0;
       const effects = strike.effects ?? [];

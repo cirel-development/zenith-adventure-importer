@@ -163,9 +163,14 @@ export function toPf2eStrikeTraits(traits: readonly string[]): {
     const t = raw.trim().toLowerCase();
     const inc = /^range increment (\d+)\s?feet$/.exec(t);
     const max = /^range (\d+)\s?feet$/.exec(t);
+    // Reach prints as "reach 10 feet" or "10-foot reach"; 5 feet is the
+    // default, and PF2e has no reach-5 trait.
+    const reach = /^reach (\d+)\s?(?:feet|foot|ft\.?)$/.exec(t) ?? /^(\d+)[- ]?(?:feet|foot|ft\.?) reach$/.exec(t);
     if (inc) range = { increment: Number(inc[1]), max: null };
     else if (max) range = { increment: null, max: Number(max[1]) };
-    else out.push(slugify(t.replace(/\s?feet$/, '')));
+    else if (reach) {
+      if (Number(reach[1]) > 5) out.push(`reach-${reach[1]}`);
+    } else out.push(slugify(t.replace(/\s?feet$/, '')));
   }
   return { traits: out.filter(Boolean), range };
 }
