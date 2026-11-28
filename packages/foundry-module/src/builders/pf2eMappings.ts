@@ -92,6 +92,8 @@ export function toPf2eSenses(senses: readonly string[], known?: Iterable<string>
 const DEFENSE_ALIASES: Record<string, string> = {
   axes: 'axe-vulnerability',
   'visual effects': 'visual',
+  // Hazard blocks print "precision damage"; PF2e's immunity is "precision".
+  'precision damage': 'precision',
   all: 'all-damage',
   'all damage': 'all-damage',
   'auditory effects': 'auditory',
@@ -305,4 +307,31 @@ export function toPf2ePropertyRuneSlug(runeName: string): string {
 export function appendAdventureNotes(existing: unknown, notesHtml: string): string {
   const base = typeof existing === 'string' ? existing : '';
   return `${base}${base ? '<hr>' : ''}<h3>In this adventure</h3>${notesHtml}`;
+}
+
+// ---------------------------------------------------------------------------
+// Ability frequency (PF2e 8.x: system.frequency = { max, per })
+// ---------------------------------------------------------------------------
+
+/** PF2e 8.x frequency keys (CONFIG.PF2E.frequencies): turn, round, PT1M, PT10M, PT1H, PT24H, day, P1W, P1M, P1Y. */
+const PER: Record<string, string> = {
+  turn: 'turn',
+  round: 'round',
+  minute: 'PT1M',
+  '10 minutes': 'PT10M',
+  hour: 'PT1H',
+  day: 'day',
+  week: 'P1W',
+  month: 'P1M',
+  year: 'P1Y',
+};
+const TIMES: Record<string, number> = { once: 1, twice: 2, 'three times': 3, 'four times': 4 };
+
+/** "once per round" -> { max: 1, per: 'round' }; anything else -> null (kept as text). */
+export function toPf2eFrequency(text: string | undefined): { max: number; value: number; per: string } | null {
+  if (!text) return null;
+  const m = /^(once|twice|three times|four times|(\d+) times) per (turn|round|minute|10 minutes|hour|day|week|month|year)/i.exec(text.trim());
+  if (!m) return null;
+  const max = m[2] ? Number(m[2]) : TIMES[m[1]!.toLowerCase()]!;
+  return { max, value: max, per: PER[m[3]!.toLowerCase()]! };
 }

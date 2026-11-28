@@ -4,6 +4,9 @@ import type { AssetMap } from '../pipeline/AssetUploader.js';
 import type { EntityRegistry } from '../pipeline/EntityRegistry.js';
 import { log } from '../log.js';
 
+/** The level id Foundry v14 gives a new scene's only level. */
+const DEFAULT_LEVEL_ID = 'defaultLevel0000';
+
 const GRID_TYPE_MAP = {
   square: 1,
   'hex-pointy-top': 2,
@@ -86,7 +89,11 @@ export class SceneBuilder {
     const sceneData: Record<string, unknown> = {
       name: entry.name,
       folder: folderId,
-      background: { src: backgroundPath },
+      // Foundry v14 keeps the map on the scene's level ("Scene Levels"); a
+      // top-level background.src alone is dropped on create. One level, made
+      // the initial one, matches what v14 creates for a new scene.
+      levels: [{ _id: DEFAULT_LEVEL_ID, name: entry.name, background: { src: backgroundPath } }],
+      initialLevel: DEFAULT_LEVEL_ID,
       width,
       height,
       padding: entry.dimensions.padding,

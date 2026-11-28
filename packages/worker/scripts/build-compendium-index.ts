@@ -20,6 +20,7 @@ import { strFromU8, unzipSync } from 'fflate';
 import {
   INDEX_ENTRY_FIELDS,
   ITEM_PACKS,
+  PREGEN_PACKS,
   packTier,
   type CompendiumIndexFile,
   type IndexEntry,
@@ -77,13 +78,14 @@ async function main(): Promise<void> {
   console.log(`[index] ${tag}: ${wanted.length} packs`);
   const files = unzipSync(new Uint8Array(await readFile(zipPath)), {
     filter: (f) => {
-      const m = /^packs\/([^/]+)\.json$/.exec(f.name);
-      return !!m && byFolder.has(m[1]!);
+      const m = /^packs\/([^/]+?)(_folders)?\.json$/.exec(f.name);
+      return !!m && byFolder.has(m[1]!) && (!m[2] || PREGEN_PACKS.includes(byFolder.get(m[1]!)!.name));
     },
   });
 
   const packs: IndexPack[] = [];
   const entries: IndexEntry[] = [];
+  const pregenFolders: Record<string, string> = {};
   const missing: string[] = [];
 
   const sortedPacks = [...wanted].sort((a, b) => a.name.localeCompare(b.name));
@@ -104,8 +106,14 @@ async function main(): Promise<void> {
       count: docs.length,
       tier: packTier(sp.name, sp.type),
     });
+    const folderFile = PREGEN_PACKS.includes(sp.name) ? files[`packs/${folder}_folders.json`] : undefined;
+    const folderNames = new Map<string, string>(
+      folderFile ? (JSON.parse(strFromU8(folderFile)) as any[]).map((f) => [f._id as string, f.name as string]) : [],
+    );
     for (const d of docs) {
       if (typeof d?._id !== 'string' || typeof d?.name !== 'string') continue;
+      const folderName = d.folder ? folderNames.get(d.folder) : undefined;
+      if (folderName) pregenFolders[`${sp.name}/${d._id}`] = folderName;
       const level = d.system?.details?.level?.value ?? d.system?.level?.value ?? null;
       const rarity = d.system?.traits?.rarity ?? null;
       entries.push([d.name, d._id, packIdx, d.type, typeof level === 'number' ? level : null, rarity]);
@@ -125,6 +133,7 @@ async function main(): Promise<void> {
     entryFields: [...INDEX_ENTRY_FIELDS],
     packs,
     entries,
+    pregenFolders: Object.fromEntries(Object.entries(pregenFolders).sort(([a], [b]) => a.localeCompare(b))),
   };
 
   await mkdir(dirname(OUT), { recursive: true });
@@ -134,6 +143,7 @@ async function main(): Promise<void> {
     `  "source": ${JSON.stringify(out.source)},\n` +
     `  "entryFields": ${JSON.stringify(out.entryFields)},\n` +
     `  "packs": [\n${packs.map((p) => '    ' + JSON.stringify(p)).join(',\n')}\n  ],\n` +
+    `  "pregenFolders": ${JSON.stringify(out.pregenFolders)},\n` +
     `  "entries": [\n${entries.map((e) => '    ' + JSON.stringify(e)).join(',\n')}\n  ]\n}\n`;
   await writeFile(OUT, body, 'utf8');
 

@@ -10,6 +10,10 @@
  *     with a review flag. Gaps of 2+ stay custom.
  *   - Hazards follow the same rules via findHazard.
  *
+ *   - Pregenerated PCs and their familiars (role says so) match PF2e's
+ *     Adventure Pregens / Iconics packs, preferring the build filed under the
+ *     adventure's own title; a build from another adventure is flagged.
+ *
  * The adventure pack is the pack whose label is the adventure title; failing
  * that, the non-core pack (tier 4) that most of the exact name hits come from,
  * when it has at least 2 hits and no tie (e.g. A Few Flowers More's stat
@@ -25,6 +29,8 @@ export interface ActorMatchDecision {
   confidence: number;
   /** "Weak Ghost Commoner" -> base Ghost Commoner with PF2e's weak adjustment. */
   adjustment?: 'elite' | 'weak';
+  /** A pregenerated player character (or its familiar) from PF2e's pregen packs. */
+  pregen?: boolean;
 }
 
 export interface ActorMatchPlan {
@@ -37,7 +43,12 @@ export interface ActorMatchPlan {
 interface Named {
   name: string;
   level: number | null;
+  /** "Pregenerated PC, gourd leshy druid", "Bottlespeaker's familiar". */
+  role?: string;
 }
+
+const PREGEN_ROLE = /\bpre-?generated\b|\biconic\b|\bplayer character\b|\bPC\b/i;
+const FAMILIAR_ROLE = /\bfamiliar\b/i;
 
 export function planActorMatches(
   index: CompendiumIndex,
@@ -108,10 +119,26 @@ export function planActorMatches(
     };
   };
 
+  const decidePregen = (n: Named): ActorMatchDecision | null => {
+    if (!n.role || !(PREGEN_ROLE.test(n.role) || FAMILIAR_ROLE.test(n.role))) return null;
+    const m = index.findPregen(n.name, { title: extracted.title, level: n.level });
+    if (!m) return null;
+    if (m.fromAdventure) return { match: m, reviewReasons: [], confidence: 0.9, pregen: true };
+    const levelOk = n.level === null || m.level === null || m.level === n.level;
+    return {
+      match: m,
+      reviewReasons: [
+        `Pregen "${m.name}" comes from another adventure's set in ${m.packLabel}${levelOk ? '' : ` (level ${m.level}; the adventure says ${n.level})`}; check it is the same build.`,
+      ],
+      confidence: levelOk ? 0.7 : 0.5,
+      pregen: true,
+    };
+  };
+
   return {
     adventurePack,
     adventurePackSource,
-    npcs: extracted.npcs.map((n) => decideCreature(n.name, n.level)),
+    npcs: extracted.npcs.map((n) => decidePregen(n) ?? decideCreature(n.name, n.level)),
     hazards: extracted.hazards.map((h) =>
       decide(index.findHazard(h.name, { level: h.level, adventurePack }), h.level),
     ),

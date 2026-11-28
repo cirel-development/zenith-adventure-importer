@@ -347,7 +347,9 @@ export function scoreParsed(block: ParsedStatBlock, endUncertain = false): { con
     ['saves', block.saves !== null, 1],
     ['hp', block.hp !== null, 1],
     ['speed', block.speeds !== null, 1],
-    ['strikes', block.strikes.length > 0, 1],
+    // Troops attack with actions ("Pummeling Winds [one-action] to
+    // [three-actions]"), not Strikes, so none are expected.
+    ...(block.traits.includes('troop') ? [] : ([['strikes', block.strikes.length > 0, 1]] as [string, boolean, number][])),
   ];
   const total = core.reduce((n, c) => n + c[2], 0);
   let confidence = core.reduce((n, c) => n + (c[1] ? c[2] : 0), 0) / total;

@@ -4,6 +4,15 @@ import type { EntityRegistry } from './EntityRegistry.js';
 import { log } from '../log.js';
 
 /**
+ * Update fragment that deletes `parent.key`: Foundry v14's ForcedDeletion
+ * operator when present, else the older "-=key" form.
+ */
+function forcedDeletion(parent: string, key: string): Record<string, unknown> {
+  const Op = (globalThis as any).foundry?.data?.operators?.ForcedDeletion;
+  return Op ? { [`${parent}.${key}`]: new Op() } : { [`${parent}.-=${key}`]: null };
+}
+
+/**
  * Resolves [[REF:type:slug]] tokens after all entities have been created.
  *
  * Two distinct resolution targets:
@@ -108,8 +117,9 @@ export class RefResolver {
           _id: note.id,
           entryId: target.foundryId,
           ...(pageId ? { pageId } : {}),
-          // Clear the unresolved flag now that it's wired up
-          'flags.zenith-adventure-importer.-=unresolvedJournalRef': null,
+          // Clear the unresolved flag now that it's wired up. Foundry v14
+          // deprecates the "-=key" form in favor of ForcedDeletion (removed in v16).
+          ...forcedDeletion('flags.zenith-adventure-importer', 'unresolvedJournalRef'),
         });
       }
 

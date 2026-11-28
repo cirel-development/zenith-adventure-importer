@@ -10,7 +10,8 @@ import type { CompendiumIndex } from '../compendium/index.js';
 import { planActorMatches, type ActorMatchDecision } from '../compendium/match.js';
 import { planItem, type ItemPlan } from '../compendium/items.js';
 import { scanStatBlocks } from '../statblock/scan.js';
-import { indexBlocks, inventoryResolver, linkStatBlock, spellResolver, toCustomStatBlock, unresolvedSpells } from '../statblock/link.js';
+import { parseHazardBlock } from '../statblock/hazard.js';
+import { indexBlocks, indexHazardBlocks, nameKeys, toCustomHazard, inventoryResolver, linkStatBlock, spellResolver, toCustomStatBlock, unresolvedSpells } from '../statblock/link.js';
 import { scoreParsed, type ParsedStatBlock } from '../statblock/parse.js';
 import { normalizeName } from '../compendium/index.js';
 
@@ -276,7 +277,9 @@ export function assembleBundle(
   // own text as notes_html. Everything else is a custom actor with
   // placeholder stats pending stat-block parsing — the manifest warns the GM.
   const plan = opts.compendium ? planActorMatches(opts.compendium, extracted) : null;
-  const blockIndex = opts.pdfText ? indexBlocks(scanStatBlocks(opts.pdfText)) : null;
+  const scannedBlocks = opts.pdfText ? scanStatBlocks(opts.pdfText) : null;
+  const blockIndex = scannedBlocks ? indexBlocks(scannedBlocks) : null;
+  const hazardIndex = scannedBlocks ? indexHazardBlocks(scannedBlocks) : null;
   const versionPin = opts.compendium ? `pf2e@${opts.compendium.version}` : undefined;
   const spellIdx = opts.spellIndex ?? opts.compendium;
   const resolveSpell = spellIdx ? spellResolver(spellIdx) : undefined;
@@ -295,6 +298,8 @@ export function assembleBundle(
       notes_html: notesHtml,
       ...(decision.adjustment ? { overrides: { adjustment: decision.adjustment } } : {}),
     },
+    // Pregens are the players' characters: friendly, one linked actor.
+    ...(decision.pregen ? { token_config: { disposition: 'friendly' as const, scale: 1, unlinked: false } } : {}),
     ai_metadata: {
       confidence: decision.confidence,
       extracted_at: new Date().toISOString(),
@@ -434,6 +439,27 @@ export function assembleBundle(
     // A compendium hazard has real structured stats, so the overlay only
     // needs the adventure's prose, not the verbatim mechanics block.
     if (decision) return compendiumActor(base, decision, `<p>${escapeHtml(haz.description)}</p>`);
+
+    // Parsed hazard block from the PDF (v0.2.2). A near-empty parse (a
+    // reference like "Spear Launchers (2)") falls through to the placeholder.
+    const block = hazardIndex ? nameKeys(haz.name).map((k) => hazardIndex.get(k)).find(Boolean) : undefined;
+    const parsed = block ? parseHazardBlock(block) : null;
+    if (parsed && parsed.confidence >= 0.5) {
+      const reasons: string[] = [];
+      if (parsed.missing.length) reasons.push(`Hazard parse is missing: ${parsed.missing.join(', ')}.`);
+      if (block!.endUncertain) reasons.push("The hazard's end in the PDF was unclear; check the last action's text for adventure prose.");
+      return {
+        ...base,
+        stat_block: toCustomHazard(parsed.hazard, `<p>${escapeHtml(haz.description)}</p>`),
+        ai_metadata: {
+          confidence: parsed.confidence,
+          extracted_at: new Date().toISOString(),
+          prompt_version: 'statblock-hazard-1',
+          review_required: reasons.length > 0,
+          review_reasons: reasons,
+        },
+      } as Bundle['actors']['entities'][number];
+    }
     return {
       ...base,
       stat_block: {

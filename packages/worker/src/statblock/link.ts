@@ -14,6 +14,9 @@ import type { ScannedBlock } from './scan.js';
 import { parseStatBlock, type ParseResult, type ParsedStatBlock } from './parse.js';
 import { LEGACY_SPELL_NAMES, type ParsedSpellcasting } from './spells.js';
 import { parseInventoryLine, singular, type InventoryLine } from './inventory.js';
+import { abilityDescriptionHtml, parseAbilities, type ParsedAbility } from './abilities.js';
+import { inlineRolls } from './rolls.js';
+import type { ParsedHazard } from './hazard.js';
 import { planItem, type ItemPlan } from '../compendium/items.js';
 
 type CustomStatBlock = Extract<Bundle['actors']['entities'][number]['stat_block'], { kind: 'custom' }>;
@@ -206,7 +209,23 @@ export function toCustomStatBlock(
     if (hit) inventory.push(hit);
     else unmatchedItems.push(line.printed);
   }
-  const abilityText = [p.defensiveText, leftover, p.abilitiesText].filter(Boolean).join(' ');
+  // Special abilities become PF2e actions, grouped like the NPC sheet: the
+  // ones printed before AC (interaction), between HP and Speed (defensive),
+  // and after the Strikes (offensive). Text before a section's first ability
+  // name stays in the notes.
+  const actions: CustomStatBlock['actions'] = [];
+  const unparsed: string[] = [];
+  for (const [text, category] of [
+    [leftover, 'interaction'],
+    [p.defensiveText, 'defensive'],
+    [p.abilitiesText, 'offensive'],
+  ] as const) {
+    if (!text) continue;
+    const { abilities, rest } = parseAbilities(text);
+    if (rest) unparsed.push(rest);
+    for (const a of abilities) actions.push({ ...toAction(a), category });
+  }
+  const abilityText = unparsed.join(' ');
   return {
     kind: 'custom',
     level: Math.max(-1, Math.min(30, lvl)),
@@ -236,12 +255,81 @@ export function toCustomStatBlock(
       ...(s.effects.length ? { effects: s.effects } : {}),
       traits: s.traits,
     })),
-    actions: [],
+    actions,
     spellcasting: toContractSpellcasting(p.spellcasting, resolveSpell),
     inventory,
     tactics_html:
       notesHtml +
       (abilityText ? `<h3>Abilities (from the stat block)</h3><p>${escapeHtml(abilityText)}</p>` : '') +
       (unmatchedItems.length ? `<p><strong>Items</strong> ${escapeHtml(unmatchedItems.join(', '))}</p>` : ''),
+  };
+}
+
+/** Hazard blocks by name key ("Spear Launcher", "spear launchers"); the first printed wins. */
+export function indexHazardBlocks(blocks: ScannedBlock[]): Map<string, ScannedBlock> {
+  const map = new Map<string, ScannedBlock>();
+  for (const b of blocks) {
+    if (b.form !== 'hazard') continue;
+    for (const k of nameKeys(b.name)) if (!map.has(k)) map.set(k, b);
+  }
+  return map;
+}
+
+const toAction = (a: ParsedAbility): CustomStatBlock['actions'][number] => ({
+  name: a.name,
+  cost: a.cost,
+  traits: a.traits,
+  ...(a.frequency ? { frequency: a.frequency } : {}),
+  ...(a.trigger ? { trigger: a.trigger } : {}),
+  ...(a.requirements ? { requirements: a.requirements } : {}),
+  category: 'offensive',
+  description_html: inlineRolls(abilityDescriptionHtml(a)),
+});
+
+/** Contract custom stat block (with the `hazard` extension) from a parsed hazard. */
+export function toCustomHazard(h: ParsedHazard, notesHtml: string): CustomStatBlock {
+  const lvl = h.level;
+  const p = (s: string) => (s ? inlineRolls(`<p>${escapeHtml(s)}</p>`) : '');
+  return {
+    kind: 'custom',
+    level: Math.max(-1, Math.min(30, lvl)),
+    size: 'medium',
+    rarity: h.rarity,
+    alignment: 'no-alignment',
+    traits: h.traits,
+    languages: [],
+    hp: h.hp ?? 0,
+    ac: h.ac ?? 10 + lvl,
+    saves: { fortitude: h.saves.fortitude ?? 0, reflex: h.saves.reflex ?? 0, will: h.saves.will ?? 0 },
+    abilities: { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+    perception: 0,
+    senses: [],
+    skills: [],
+    speeds: { land: 0 },
+    immunities: h.immunities,
+    weaknesses: h.weaknesses,
+    resistances: h.resistances,
+    strikes: h.strikes.map((s) => ({
+      name: s.name,
+      type: s.kind,
+      attack_bonus: s.bonus,
+      damage_formula: s.damage.map((d) => [d.formula, d.persistent ? 'persistent' : '', d.type ?? ''].filter(Boolean).join(' ')).join(' plus '),
+      ...(s.effects.length ? { effects: s.effects } : {}),
+      traits: s.traits,
+    })),
+    actions: h.abilities.map(toAction),
+    spellcasting: [],
+    inventory: [],
+    tactics_html: notesHtml,
+    hazard: {
+      ...(h.stealthDc !== null ? { stealth_dc: h.stealthDc } : {}),
+      ...(h.stealthDetails ? { stealth_details: h.stealthDetails } : {}),
+      is_complex: h.complex,
+      ...(h.hardness !== null ? { hardness: h.hardness } : {}),
+      description_html: p(h.description) + notesHtml,
+      ...(h.disable ? { disable_html: p(h.disable) } : {}),
+      ...(h.routine ? { routine_html: p(h.routine) } : {}),
+      ...(h.reset ? { reset_html: p(h.reset) } : {}),
+    },
   };
 }

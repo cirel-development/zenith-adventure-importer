@@ -133,6 +133,10 @@ const PF2eActionSchema = z.object({
   traits: z.array(z.string()).default([]),
   frequency: z.string().optional(), // e.g. "once per minute"
   trigger: z.string().optional(),
+  // v0.2.2, optional: printed Requirements, and the stat-block section the
+  // ability was printed in (PF2e NPC sheets group actions this way).
+  requirements: z.string().optional(),
+  category: z.enum(['interaction', 'defensive', 'offensive']).optional(),
   description_html: RefContentSchema,
   // If matched to compendium feat/action
   source_uuid: CompendiumUuidSchema.optional(),
@@ -222,6 +226,21 @@ const CustomStatBlockSchema = z.object({
 
   // Free-form GM tactics paragraph
   tactics_html: RefContentSchema.optional(),
+
+  // v0.2.2, optional, hazards only (category "hazard"): fields PF2e hazards
+  // have and creatures don't. Actions and strikes use the arrays above.
+  hazard: z
+    .object({
+      stealth_dc: z.number().int().optional(),
+      stealth_details: z.string().optional(), // "(trained)"
+      is_complex: z.boolean().optional(),
+      hardness: z.number().int().nonnegative().optional(),
+      description_html: RefContentSchema.optional(),
+      disable_html: RefContentSchema.optional(),
+      routine_html: RefContentSchema.optional(),
+      reset_html: RefContentSchema.optional(),
+    })
+    .optional(),
 });
 
 // ============================================================================

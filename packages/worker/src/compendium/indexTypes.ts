@@ -31,7 +31,16 @@ export interface CompendiumIndexFile {
   entryFields: string[];
   packs: IndexPack[];
   entries: IndexEntry[];
+  /**
+   * Pregenerated-character packs only: "<pack name>/<_id>" -> the folder the
+   * entry sits in, which PF2e names after the adventure ("A Few Flowers
+   * More"). Lets a pregen match its own adventure's build.
+   */
+  pregenFolders?: Record<string, string>;
 }
+
+/** Actor packs of pregenerated player characters (type character/familiar). */
+export const PREGEN_PACKS = ['paizo-pregens', 'iconics'];
 
 const REMASTER_CORE = ['pathfinder-monster-core', 'pathfinder-monster-core-2', 'pathfinder-npc-core'];
 const LEGACY_CORE = ['pathfinder-bestiary', 'pathfinder-bestiary-2', 'pathfinder-bestiary-3', 'npc-gallery'];

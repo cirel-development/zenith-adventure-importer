@@ -10,6 +10,7 @@ import {
   toPf2eAttackEffects,
   toPf2eDamageRolls,
   toPf2eDefenseType,
+  toPf2eFrequency,
   toPf2eHazardTraits,
   toPf2eLanguages,
   toPf2eSenses,
@@ -60,6 +61,7 @@ check('senses', toPf2eSenses(['low-light vision', 'scent (imprecise) 30 feet', '
   details: 'smoke vision',
 });
 check('defense alias', [toPf2eDefenseType('axes'), toPf2eDefenseType('Cold Iron'), toPf2eDefenseType('visual effects')], ['axe-vulnerability', 'cold-iron', 'visual']);
+check('hazard precision damage', toPf2eDefenseType('precision damage'), 'precision');
 check('defense split', splitKnownDefenses([{ type: 'fire', value: 5 }, { type: 'bramble', value: 2 }], ['fire']), { kept: [{ type: 'fire', value: 5 }], unknownText: 'bramble 2' });
 check('damage rolls', toPf2eDamageRolls('1d6+2 piercing plus 1d4 acid plus 1d4 persistent bleed'), [
   { damage: '1d6+2', damageType: 'piercing', category: null },
@@ -92,6 +94,18 @@ check('rune slug hyphen', toPf2ePropertyRuneSlug('Energy-Resistant'), 'energyRes
 check('rune slug apostrophes', toPf2ePropertyRuneSlug("Fear-Some's Bane"), 'fearSomesBane');
 check('adventure notes fresh', appendAdventureNotes('', '<p>x</p>'), '<h3>In this adventure</h3><p>x</p>');
 check('adventure notes existing', appendAdventureNotes('<p>a</p>', '<p>x</p>'), '<p>a</p><hr><h3>In this adventure</h3><p>x</p>');
+
+check('frequency once per round', toPf2eFrequency('once per round'), { max: 1, value: 1, per: 'round' });
+check('frequency twice per day', toPf2eFrequency('twice per day'), { max: 2, value: 2, per: 'day' });
+check('frequency 10 minutes', toPf2eFrequency('once per 10 minutes')?.per, 'PT10M');
+check('frequency hour', toPf2eFrequency('once per hour')?.per, 'PT1H');
+check('frequency N times', toPf2eFrequency('3 times per day')?.max, 3);
+check('frequency with trailing clause', toPf2eFrequency('once per round; Effect The foe falls.'), { max: 1, value: 1, per: 'round' });
+check('frequency non-matching', toPf2eFrequency('until the end of the encounter'), null);
+check('frequency undefined', toPf2eFrequency(undefined), null);
+// PF2e keys weeks/months/years as ISO durations; "year" alone makes Foundry drop the item.
+check('frequency per year', toPf2eFrequency('three times per year'), { max: 3, value: 3, per: 'P1Y' });
+check('frequency per week', toPf2eFrequency('once per week')?.per, 'P1W');
 
 if (failures.length) {
   console.error(`\n${failures.length} mapping check(s) failed`);

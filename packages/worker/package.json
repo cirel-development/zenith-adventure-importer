@@ -24,6 +24,8 @@
     "test:statblock": "tsx tests/statblock.check.ts",
     "test:link": "tsx tests/link.check.ts",
     "test:inventory": "tsx tests/inventory.check.ts",
+    "test:abilities": "tsx tests/abilities.check.ts",
+    "test:hazards": "tsx tests/hazards.check.ts",
     "test:spells": "tsx tests/spells.check.ts",
     "test:fallback": "tsx tests/fallback.check.ts"
   },

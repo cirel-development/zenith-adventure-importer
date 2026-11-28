@@ -120,7 +120,11 @@ check('no resolver: all items stay', itemsPara(noRes.tactics_html), '+1 striking
 
 const withLeft = toCustomStatBlock(parsedBase(['torch', '+1 striking jambiya (functions as a dagger) Cloud of Visions (aura) 30 feet.'], 'Sneaky.'), '', undefined, resolve);
 const abil = /<h3>Abilities \(from the stat block\)<\/h3><p>([^<]*)<\/p>/.exec(withLeft.tactics_html)?.[1] ?? '';
-check('leftover in Abilities paragraph', [abil.includes('Cloud of Visions (aura) 30 feet.'), abil.includes('Sneaky.')], [true, true]);
+// The ability that ran into the Items list becomes an interaction action;
+// text with no ability name stays in the Abilities paragraph.
+const cloud = withLeft.actions.find((a) => a.name === 'Cloud of Visions');
+check('leftover ability becomes an interaction action', [cloud?.category, cloud?.traits], ['interaction', ['aura']]);
+check('unnamed text stays in Abilities paragraph', [abil.includes('Sneaky.'), abil.includes('Cloud of Visions')], [true, false]);
 check('leftover item still linked', withLeft.inventory.length >= 2, true);
 
 // --- assembleBundle path --------------------------------------------------

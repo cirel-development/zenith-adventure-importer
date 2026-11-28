@@ -22,8 +22,8 @@ import { getAllImportRecords, getImportRecord, type ImportRecord } from '../sett
 /** Served by Foundry from <Data>/zenith-fixtures/ (setup.ps1 copies it there). */
 export const FIXTURE_PATH = 'zenith-fixtures/test-bundle.zip';
 const FIXTURE_ADVENTURE_SLUG = 'test-bundle-2a';
-const EXPECTED_ACTORS = 22; // 16 custom + 2 parsed + 4 compendium-ref
-const EXPECTED_ENTITIES = 4 /* folders */ + 1 /* journal */ + 5 /* items */ + EXPECTED_ACTORS;
+const EXPECTED_ACTORS = 23; // 16 custom + 3 parsed + 4 compendium-ref
+const EXPECTED_ENTITIES = 5 /* folders */ + 1 /* journal */ + 5 /* items */ + 1 /* scene */ + EXPECTED_ACTORS;
 
 export interface SuiteState {
   record: ImportRecord | null;
@@ -74,6 +74,8 @@ function includesAll(actual: unknown, expected: string[], what: string): void {
     throw new AssertionFailed(`${what}: missing ${fmt(missing)} in ${fmt(actual)}`);
   }
 }
+
+const includes = (arr: unknown, x: string): boolean => Array.isArray(arr) && arr.includes(x);
 
 function get(obj: any, path: string): unknown {
   return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
@@ -190,6 +192,24 @@ export const cases: TestCase[] = [
     },
   },
   {
+    name: 'parsed hazard: stealth, disable, reset, hardness, reaction and Strike',
+    run: (s) => {
+      const a = actor(s, 'parsed-hazard');
+      eq(a.type, 'hazard', 'type');
+      eq(src(a, 'system.attributes.stealth.value'), 11, 'Stealth DC 21 stored as +11');
+      ok(String(src(a, 'system.attributes.stealth.details')).includes('trained'), 'stealth details');
+      eq([src(a, 'system.attributes.hardness'), src(a, 'system.attributes.hp.max'), src(a, 'system.attributes.ac.value')], [9, 36, 19], 'hardness/hp/ac');
+      eq((src(a, 'system.attributes.immunities') as any[]).map((i) => i.type).sort(), ['critical-hits', 'object-immunities', 'precision'], 'immunities');
+      ok(String(src(a, 'system.details.disable')).includes('@Check[type:thievery|dc:19]'), 'disable with inline check');
+      ok(String(src(a, 'system.details.reset')).includes('resets'), 'reset text');
+      ok(String(src(a, 'system.details.description')).includes('slot in the wall'), 'description');
+      const reaction = a.items.find((i: any) => i.type === 'action');
+      eq([reaction?.name, reaction?._source.system.actionType.value], ['Swinging Blade', 'reaction'], 'reaction');
+      const strike = a.items.find((i: any) => i.type === 'melee');
+      eq([strike?.name, strike?._source.system.bonus.value], ['blade', 15], 'hazard Strike');
+    },
+  },
+  {
     name: 'notes: tactics_html lands in system.details.publicNotes',
     run: (s) => {
       const notes = String(src(actor(s, 'notes-plain'), 'system.details.publicNotes') ?? '');
@@ -279,6 +299,23 @@ export const cases: TestCase[] = [
       ok(pod._source.system.traits.value.includes('thrown-20'), 'thrown trait slug');
       eq(Object.keys(pod._source.system.damageRolls).length, 0, 'effect-only strike has no damage');
       ok(String(pod._source.system.description?.value ?? '').includes('sickened 1'), 'effect text kept');
+    },
+  },
+  {
+    name: 'parsed abilities: action items with cost, category, known traits, frequency',
+    run: (s) => {
+      const a = actor(s, 'parsed-full');
+      const acts = a.items.filter((i: any) => i.type === 'action');
+      const by = (n: string) => acts.find((i: any) => i.name === n);
+      eq(acts.map((i: any) => i.name).sort(), ['Bramble Hound Aura', 'Seed Burst', 'Thorn Rebuke'], 'action names');
+      eq([by('Bramble Hound Aura')._source.system.actionType.value, by('Bramble Hound Aura')._source.system.category], ['passive', 'interaction'], 'passive aura');
+      eq([by('Thorn Rebuke')._source.system.actionType.value, by('Thorn Rebuke')._source.system.category], ['reaction', 'defensive'], 'reaction');
+      const burst = by('Seed Burst');
+      eq([burst._source.system.actionType.value, burst._source.system.actions.value, burst._source.system.category], ['action', 2, 'offensive'], 'two-action ability');
+      eq(burst._source.system.traits.value, ['plant'], 'unknown trait dropped');
+      eq([burst._source.system.frequency?.max, burst._source.system.frequency?.per], [1, 'round'], 'structured frequency');
+      ok(String(burst._source.system.description.value).includes('<strong>Effect</strong>'), 'description kept');
+      ok(includes(by('Bramble Hound Aura')._source.system.traits.value, 'aura'), 'aura trait kept');
     },
   },
   {
@@ -406,6 +443,19 @@ export const cases: TestCase[] = [
       const desc = String(src(potion, 'system.description.value'));
       ok(desc.includes('<h3>In this adventure</h3>') && desc.includes('ZENITH-ITEM-NOTES item-potion'), 'notes overlay');
       ok(desc.indexOf('ZENITH') > 20, 'compendium description kept before the overlay');
+    },
+  },
+  {
+    name: 'scene (v14): map on the level, walls/door/light/sound, note pinned to its page',
+    run: (s) => {
+      const sc = doc(s, 'scene', 'test-scene');
+      const level = sc.levels?.contents?.[0];
+      ok(String(level?.background?.src ?? '').endsWith('maps/test-map.png'), 'map on the scene level');
+      eq(sc._source.initialLevel, level?.id, 'initial level set');
+      eq([sc.walls.size, sc.walls.filter((w: any) => w.door).length, sc.lights.size, sc.sounds.size], [2, 1, 1, 1], 'walls/door/light/sound');
+      const note = sc.notes.contents[0];
+      eq([note?.entry?.name, note?.page?.flags?.['zenith-adventure-importer']?.slug], ['Bug Test Bundle — Overview', 'how-to-use'], 'note opens the overview page');
+      eq(note?.flags?.['zenith-adventure-importer']?.unresolvedJournalRef ?? null, null, 'temporary ref flag cleared');
     },
   },
   {

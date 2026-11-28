@@ -18,7 +18,8 @@ Foundry VTT v14 module (PF2e 8.7.x) that imports adventure bundles produced by t
   fields
 - Spellcasting entries with compendium spells, and inventory (runes, materials, quantities,
   held/worn) on custom NPCs
-- Scenes with walls, lights, ambient sounds, map notes (written for v13; not yet re-tested on v14)
+- Scenes with walls, lights, ambient sounds, map notes (v14: the map goes on the scene's level)
+- Special abilities as PF2e actions, parsed hazards, and adventure pregens as PF2e characters
 - In-Foundry self-test: `await game.modules.get('zenith-adventure-importer').api.selfTest()`
 - Empty playlist scaffolding
 - Cross-reference resolution (`[[REF:type:slug]]` → `@UUID[]`)

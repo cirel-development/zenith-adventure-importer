@@ -52,6 +52,27 @@ check('weak with wrong level -> custom', planActorMatches(idx, { title: 'x', npc
 const plague = planActorMatches(idx, { title: 'The Fall of Plaguestone', npcs: [], hazards: [] });
 check('Plaguestone pack from title', [plague.adventurePack, plague.adventurePackSource], ['fall-of-plaguestone-bestiary', 'title']);
 
+// --- Pregenerated PCs: PF2e's Adventure Pregens pack, the adventure's own build first.
+const pg = (name: string, role: string, level: number | null, title = 'A Few Flowers More') =>
+  planActorMatches(idx, { title, npcs: [{ name, level, role }], hazards: [] }).npcs[0];
+const bottle = pg('Bottlespeaker', 'Pregenerated PC, gourd leshy druid', 4);
+check('pregen from own adventure', [bottle?.match.name, bottle?.match.type, bottle?.pregen, bottle?.reviewReasons.length], ['Bottlespeaker (Level 4)', 'character', true, 0]);
+check('pregen picks the other adventure build by title', pg('Bottlespeaker', 'Pregenerated PC', null, 'A Fistful of Flowers')?.match.name, 'Bottlespeaker');
+const fam = pg('Twinsprout', "Bottlespeaker's familiar", null);
+check('familiar from the sibling adventure is flagged', [fam?.match.type, fam?.reviewReasons.length], ['familiar', 1]);
+check('no pregen role -> no pregen lookup', pg('Bottlespeaker', 'Leshy druid', 4), null);
+const fistBundle = assembleBundle(
+  ExtractedAdventureZ.parse({
+    title: 'A Few Flowers More',
+    synopsis: 's',
+    chapters: [{ name: 'Start', slug: 'start', summary: 'c' }],
+    npcs: [{ name: 'Popcorn', role: 'Pregenerated PC, vine leshy barbarian', description: 'A cook.', level: 4, chapter_slug: null }],
+  }),
+  { pdfBytes: new Uint8Array([1]), compendium: idx },
+);
+const popcorn = fistBundle.actors.entities[0]!;
+check('pregen bundle: compendium-ref, friendly linked token', [popcorn.stat_block.kind, popcorn.token_config], ['compendium-ref', { disposition: 'friendly', scale: 1, unlinked: false }]);
+
 // --- assembleBundle wiring.
 const extracted = ExtractedAdventureZ.parse({
   title: 'A Few Flowers More',

@@ -18,11 +18,14 @@ import {
   toPf2eLanguages,
   toPf2eSenses,
   toPf2eSize,
+  toPf2eFrequency,
   toPf2eSkillSlug,
   toPf2eSpellLabel,
   toPf2eSpellPlacement,
   toPf2eStrikeTraits,
 } from './pf2eMappings.js';
+
+const keysOf = (o: unknown): Set<string> | undefined => (o && typeof o === 'object' ? new Set(Object.keys(o)) : undefined);
 
 /** Language slugs PF2e knows at runtime; undefined outside Foundry. */
 function pf2eLanguageSlugs(): string[] | undefined {
@@ -189,14 +192,21 @@ export class ActorBuilder {
     // Spells and gear are copied from the compendium; drop them before giving
     // up on the strikes, abilities and lore built from the stat block.
     const items = Array.isArray(data['items']) ? (data['items'] as { type?: string }[]) : [];
-    const ownItems = items.filter((i) => i.type === 'melee' || i.type === 'action' || i.type === 'lore');
-    if (ownItems.length > 0 && ownItems.length < items.length) {
+    const ladder: [string, (i: { type?: string }) => boolean][] = [
+      ['spells/gear', (i) => i.type === 'melee' || i.type === 'action' || i.type === 'lore'],
+      ['spells/gear/abilities', (i) => i.type === 'melee' || i.type === 'lore'],
+    ];
+    let tried = items.length;
+    for (const [dropped, keep] of ladder) {
+      const kept = items.filter(keep);
+      if (kept.length === 0 || kept.length >= tried) continue;
+      tried = kept.length;
       try {
-        const created = await Actor.create({ ...data, items: ownItems });
-        log.warn(`actor "${slug}" created without spells/gear — GM must add them manually`);
+        const created = await Actor.create({ ...data, items: kept });
+        log.warn(`actor "${slug}" created without ${dropped} — GM must add them manually`);
         return created;
       } catch (err) {
-        log.warn(`actor "${slug}" still rejected without spells/gear:`, (err as Error)?.message ?? String(err));
+        log.warn(`actor "${slug}" still rejected without ${dropped}:`, (err as Error)?.message ?? String(err));
       }
     }
 
@@ -273,12 +283,21 @@ export class ActorBuilder {
     // Adventure-specific text goes after the compendium's own text. NPCs keep
     // notes in details.publicNotes; PF2e hazards have no publicNotes, so for
     // them it goes in details.description (see buildPF2eHazardSystem).
-    if (statBlock.notes_html) {
-      const system = (source['system'] ??= {}) as Record<string, any>;
-      const details = (system['details'] ??= {}) as Record<string, unknown>;
-      const field = source['type'] === 'hazard' ? 'description' : 'publicNotes';
-      const existing = typeof details[field] === 'string' ? (details[field] as string) : '';
-      details[field] = `${existing}${existing ? '<hr>' : ''}<h3>In this adventure</h3>${statBlock.notes_html}`;
+    // PF2e keeps notes in different places per actor type: NPC publicNotes,
+    // hazard description, a character's Campaign Notes. Familiars have no
+    // notes field, so their overlay is skipped.
+    const notesPath: Record<string, string[]> = {
+      npc: ['details', 'publicNotes'],
+      hazard: ['details', 'description'],
+      character: ['details', 'biography', 'campaignNotes'],
+    };
+    const path = notesPath[String(source['type'])];
+    if (statBlock.notes_html && path) {
+      let o = (source['system'] ??= {}) as Record<string, any>;
+      for (const k of path.slice(0, -1)) o = (o[k] ??= {}) as Record<string, any>;
+      const field = path[path.length - 1]!;
+      const existing = typeof o[field] === 'string' ? (o[field] as string) : '';
+      o[field] = `${existing}${existing ? '<hr>' : ''}<h3>In this adventure</h3>${statBlock.notes_html}`;
     }
 
     // If we matched by name fallback, flag the actor so the GM knows
@@ -339,10 +358,12 @@ export class ActorBuilder {
     // entirely. Better: branch on category at the top and build the right
     // shape for each.
     if (entry.category === 'hazard') {
+      // Parsed hazards (v0.2.2) carry their reactions/actions and Strikes;
+      // PF2e hazards hold them as action and melee items like NPCs do.
       return {
         type: 'hazard',
         system: this.buildPF2eHazardSystem(statBlock),
-        items: [], // hazards don't have embedded strikes/actions the same way
+        items: this.buildPF2eEmbeddedItems(statBlock, assetMap),
       };
     }
 
@@ -478,33 +499,41 @@ export class ActorBuilder {
   private buildPF2eHazardSystem(
     sb: Extract<StatBlock, { kind: 'custom' }>,
   ): Record<string, unknown> {
+    const P = (CONFIG as any)?.PF2E ?? {};
+    const keys = (o: unknown) => (o ? Object.keys(o as object) : undefined);
+    const h = sb.hazard;
+    const imm = splitKnownDefenses(sb.immunities.map((type) => ({ type })), keys(P.immunityTypes));
+    const weak = splitKnownDefenses(sb.weaknesses, keys(P.weaknessTypes));
+    const res = splitKnownDefenses(sb.resistances, keys(P.resistanceTypes));
+    const leftovers = [imm.unknownText && `Immunities: ${imm.unknownText}`, weak.unknownText && `Weaknesses: ${weak.unknownText}`, res.unknownText && `Resistances: ${res.unknownText}`].filter(Boolean);
+    // Without the hazard extension (Phase 2A placeholders) the description is the notes.
+    const description = (h?.description_html ?? sb.tactics_html ?? '') + (leftovers.length ? `<p>${leftovers.join('<br>')}</p>` : '');
     return {
       details: {
         level: { value: sb.level },
-        description: sb.tactics_html ?? '',
-        isComplex: false,
-        disable: '', // disable-action description; left empty in Phase 2A
-        reset: '', // reset rules; left empty in Phase 2A
-        routine: '', // routine on-trigger text; left empty in Phase 2A
+        description,
+        isComplex: h?.is_complex ?? false,
+        disable: h?.disable_html ?? '',
+        reset: h?.reset_html ?? '',
+        routine: h?.routine_html ?? '',
       },
       traits: {
         value: toPf2eHazardTraits(sb.traits, pf2eHazardTraitSlugs()),
         rarity: sb.rarity,
-        // Hazards have an `otherTags` field rather than a size field
-        otherTags: [],
       },
       attributes: {
-        hp: { value: sb.hp, max: sb.hp },
+        hp: { value: sb.hp, max: sb.hp, details: '' },
         ac: { value: sb.ac },
-        hardness: 0,
+        hardness: h?.hardness ?? 0,
         emitsSound: 'encounter' as const,
+        // PF2e stores Stealth as a modifier: DC 20 -> 10.
         stealth: {
-          value: sb.perception, // best guess; real value comes in Phase 2B
-          dc: 0,
+          value: h?.stealth_dc !== undefined ? h.stealth_dc - 10 : null,
+          details: h?.stealth_details ? `<p>${h.stealth_details.replace(/</g, '&lt;')}</p>` : '',
         },
-        immunities: sb.immunities.map((type) => ({ type })),
-        weaknesses: sb.weaknesses.map((w) => ({ type: w.type, value: w.value })),
-        resistances: sb.resistances.map((r) => ({ type: r.type, value: r.value })),
+        immunities: imm.kept,
+        weaknesses: weak.kept.map((w) => ({ type: w.type, value: w.value })),
+        resistances: res.kept.map((r) => ({ type: r.type, value: r.value })),
       },
       saves: {
         fortitude: { value: sb.saves.fortitude },
@@ -564,18 +593,26 @@ export class ActorBuilder {
       items.push({ type: 'lore', name: skill.name, system: { mod: { value: skill.bonus } } });
     }
 
-    // Abilities/actions → "action" type items
+    // Abilities/actions → "action" type items. Traits PF2e doesn't know are
+    // left off (they're still in the description); frequency is structured
+    // only when it reads cleanly ("once per round"); Frequency, Trigger and
+    // Requirements stay in the description, PF2e's own convention.
+    const actionTraits = keysOf((CONFIG as any)?.PF2E?.actionTraits);
+    const frequencies = keysOf((CONFIG as any)?.PF2E?.frequencies);
     for (const ability of sb.actions) {
+      // An unknown `per` makes Foundry drop the whole item, so check it.
+      const parsedFrequency = toPf2eFrequency(ability.frequency);
+      const frequency = parsedFrequency && (!frequencies || frequencies.has(parsedFrequency.per)) ? parsedFrequency : null;
       items.push({
         type: 'action',
         name: ability.name,
         system: {
           actionType: { value: this.mapActionType(ability.cost) },
           actions: { value: this.mapActionCount(ability.cost) },
-          traits: { value: ability.traits },
+          traits: { value: actionTraits ? ability.traits.filter((t) => actionTraits.has(t)) : ability.traits },
+          ...(ability.category ? { category: ability.category } : {}),
           description: { value: ability.description_html },
-          ...(ability.frequency ? { frequency: { value: ability.frequency } } : {}),
-          ...(ability.trigger ? { trigger: { value: ability.trigger } } : {}),
+          ...(frequency ? { frequency } : {}),
         },
       });
     }

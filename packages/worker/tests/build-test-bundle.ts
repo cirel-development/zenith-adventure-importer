@@ -33,6 +33,7 @@
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -125,6 +126,7 @@ const FOLDERS = {
   items: `${ADV_SLUG}-items`,
   journals: `${ADV_SLUG}-journals`,
   playlists: `${ADV_SLUG}-playlists`,
+  scenes: `${ADV_SLUG}-scenes`,
 };
 
 const actors: Bundle['actors']['entities'] = [
@@ -219,6 +221,42 @@ const actors: Bundle['actors']['entities'] = [
     ...META,
   },
 
+  // -- Parsed hazard (v0.2.2): hazard extension, reaction, glyph-less Strike.
+  {
+    slug: 'parsed-hazard',
+    name: 'Parsed Test — Rusty Blade Trap',
+    category: 'hazard',
+    folder: FOLDERS.actors,
+    stat_block: {
+      ...customStatBlock({ level: 3, rarity: 'common', alignment: 'no-alignment', traits: ['mechanical', 'trap'] }),
+      hp: 36,
+      ac: 19,
+      saves: { fortitude: 12, reflex: 6, will: 0 },
+      immunities: ['critical hits', 'object immunities', 'precision damage'],
+      strikes: [{ name: 'blade', type: 'melee', attack_bonus: 15, damage_formula: '2d8+6 slashing', traits: [] }],
+      actions: [
+        {
+          name: 'Swinging Blade',
+          cost: 'reaction',
+          traits: ['attack'],
+          trigger: 'A creature steps on the loose stone',
+          category: 'offensive',
+          description_html: '<p><strong>Trigger</strong> A creature steps on the loose stone</p><p><strong>Effect</strong> The blade attacks that creature.</p>',
+        },
+      ],
+      hazard: {
+        stealth_dc: 21,
+        stealth_details: '(trained)',
+        is_complex: false,
+        hardness: 9,
+        description_html: '<p>A blade swings from a slot in the wall.</p>',
+        disable_html: '<p>@Check[type:thievery|dc:19]{Thievery DC 19} (trained) to jam the slot</p>',
+        reset_html: '<p>The blade resets after 1 minute.</p>',
+      },
+    },
+    ...META,
+  },
+
   // -- Notes (tactics_html) tests --------------------------------------------
   {
     slug: 'notes-plain',
@@ -310,6 +348,33 @@ const actors: Bundle['actors']['entities'] = [
         { name: 'jaws', type: 'melee', attack_bonus: 12, damage_formula: '1d10+4 piercing plus 1d4 persistent bleed', effects: ['Grab'], traits: ['agile', 'reach 10 feet'] },
         { name: 'thorn', type: 'ranged', attack_bonus: 10, damage_formula: '1d6 piercing', traits: ['range increment 30 feet'] },
         { name: 'seed pod', type: 'ranged', attack_bonus: 10, damage_formula: '', effects: ['sickened 1'], traits: ['thrown 20 feet'] },
+      ],
+      // Abilities (v0.2.2): one per NPC-sheet section; "notatrait" must be
+      // dropped, "once per round" becomes structured frequency.
+      actions: [
+        {
+          name: 'Bramble Hound Aura',
+          cost: 'passive',
+          traits: ['aura', 'plant'],
+          category: 'interaction',
+          description_html: '<p>10 feet. Thorns snag at nearby creatures.</p>',
+        },
+        {
+          name: 'Thorn Rebuke',
+          cost: 'reaction',
+          traits: [],
+          trigger: 'A creature hits the hound with a melee Strike',
+          category: 'defensive',
+          description_html: '<p><strong>Trigger</strong> A creature hits the hound with a melee Strike</p><p><strong>Effect</strong> The attacker takes 1d6 piercing damage.</p>',
+        },
+        {
+          name: 'Seed Burst',
+          cost: '2',
+          traits: ['plant', 'notatrait'],
+          frequency: 'once per round',
+          category: 'offensive',
+          description_html: '<p><strong>Frequency</strong> once per round</p><p><strong>Effect</strong> Seeds burst in a 10-foot emanation (DC 19 basic Reflex save).</p>',
+        },
       ],
       // Printed gear (v0.2.2): runes, quantity + note, material, plain armor.
       inventory: [
@@ -524,6 +589,7 @@ const folders: Bundle['folders']['entities'] = [
   { slug: FOLDERS.actors, name: 'Bug Test Bundle', parent_path: null, type: 'actor', sort: 0 },
   { slug: FOLDERS.items, name: 'Bug Test Bundle', parent_path: null, type: 'item', sort: 0 },
   { slug: FOLDERS.journals, name: 'Bug Test Bundle', parent_path: null, type: 'journal', sort: 0 },
+  { slug: FOLDERS.scenes, name: 'Bug Test Bundle', parent_path: null, type: 'scene', sort: 0 },
   { slug: FOLDERS.playlists, name: 'Bug Test Bundle', parent_path: null, type: 'playlist', sort: 0 },
 ];
 
@@ -564,6 +630,27 @@ const journals: Bundle['journals']['entities'] = [
   },
 ];
 
+// -- Scene (Foundry v14 keeps the map on the scene's level): one wall with a
+//    door, a light, a sound, and a map note pinned to a journal page.
+const TEST_MAP = 'images/maps/test-map.png';
+const scenes: Bundle['scenes']['entities'] = [
+  {
+    slug: 'test-scene',
+    name: 'Scene Test — Map With Pins',
+    folder: FOLDERS.scenes,
+    background: TEST_MAP,
+    dimensions: { width: 1000, height: 800, padding: 0.25 },
+    grid: { type: 'square', size: 100 },
+    walls: [
+      { c: [0.1, 0.1, 0.9, 0.1], light: 20, move: 20, sight: 20, door: 0, ds: 0 },
+      { c: [0.1, 0.5, 0.1, 0.4], light: 20, move: 20, sight: 20, door: 1, ds: 0 },
+    ],
+    lights: [{ x: 0.5, y: 0.3, config: { dim: 4, bright: 2, color: '#ff9329', alpha: 0.5 } }],
+    sounds: [{ x: 0.5, y: 0.5, radius: 6, description: 'Dripping water', easing: true, volume: 0.5 }],
+    notes: [{ x: 0.5, y: 0.7, journal_ref: '[[REF:journal:test-overview#how-to-use]]', icon: 'icons/svg/book.svg', icon_size: 40, label: 'Read me' }],
+  } as Bundle['scenes']['entities'][number],
+];
+
 const bundle: Bundle = {
   manifest: {
     contract_version: CONTRACT_VERSION,
@@ -587,7 +674,7 @@ const bundle: Bundle = {
     },
     build_order: ['folders', 'journals', 'items', 'actors', 'scenes', 'playlists'],
     stats: {
-      scenes: 0,
+      scenes: scenes.length,
       journals: journals.length,
       playlists: 0,
       actors: {
@@ -609,7 +696,7 @@ const bundle: Bundle = {
   journals: { entities: journals },
   actors: { entities: actors },
   items: { entities: items },
-  scenes: { entities: [] },
+  scenes: { entities: scenes },
   playlists: { entities: [] },
 };
 
@@ -633,6 +720,8 @@ const files: Record<string, Uint8Array> = {
   'entities/items.json': strToU8(JSON.stringify(bundle.items, null, 2)),
   'entities/scenes.json': strToU8(JSON.stringify(bundle.scenes, null, 2)),
   'entities/playlists.json': strToU8(JSON.stringify(bundle.playlists, null, 2)),
+  // A real (tiny) PNG from the sample adventure stands in for a map.
+  [TEST_MAP]: readFileSync(join(HERE, '..', '..', 'foundry-module', 'samples', 'the-haunted-mill', 'images', 'maps', 'the-mill.png')),
 };
 
 const zipped = zipSync(files);

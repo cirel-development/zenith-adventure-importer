@@ -12,7 +12,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { CompendiumIndexFile, IndexEntry, IndexPack } from './indexTypes.js';
+import { PREGEN_PACKS, type CompendiumIndexFile, type IndexEntry, type IndexPack } from './indexTypes.js';
 
 const DEFAULT_INDEX = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'data', 'compendium-index.json');
 
@@ -77,10 +77,12 @@ export class CompendiumIndex {
   readonly version: string;
   private readonly packs: IndexPack[];
   private readonly byName = new Map<string, IndexEntry[]>();
+  private readonly pregenFolders: Record<string, string>;
 
   constructor(data: CompendiumIndexFile) {
     this.version = data.source.version;
     this.packs = data.packs;
+    this.pregenFolders = data.pregenFolders ?? {};
     for (const e of data.entries) {
       const key = normalizeName(e[0]);
       const list = this.byName.get(key);
@@ -101,6 +103,41 @@ export class CompendiumIndex {
 
   findCreature(name: string, query: CreatureQuery = {}): CompendiumMatch | null {
     return this.best(name, (e) => this.packs[e[2]]!.docType === 'Actor' && CREATURE_TYPES.has(e[3]), query);
+  }
+
+  /**
+   * A pregenerated PC (or its familiar) from PF2e's Adventure Pregens /
+   * Iconics packs. PF2e names level variants "Bottlespeaker (Level 4)", so
+   * the name is compared without that suffix. Ranking: the build filed under
+   * the adventure's own title, then the closest level, then pack order.
+   * `fromAdventure` says whether the adventure folder matched.
+   */
+  findPregen(name: string, query: { title?: string; level?: number | null } = {}): (CompendiumMatch & { fromAdventure: boolean }) | null {
+    const key = normalizeName(name);
+    const title = query.title ? normalizeName(query.title) : null;
+    const strip = (n: string) => normalizeName(n.replace(/\s*\((?:level\s\d+|beginner box)\)\s*$/i, ''));
+    const list: IndexEntry[] = [];
+    for (const [k, entries] of this.byName) {
+      if (k !== key && !k.startsWith(`${key} `)) continue;
+      for (const e of entries) {
+        const p = this.packs[e[2]]!;
+        if (PREGEN_PACKS.includes(p.name) && strip(e[0]) === key) list.push(e);
+      }
+    }
+    if (!list.length) return null;
+    const folderOf = (e: IndexEntry) => this.pregenFolders[`${this.packs[e[2]]!.name}/${e[1]}`];
+    const inAdventure = (e: IndexEntry) => (title !== null && normalizeName(folderOf(e) ?? '') === title ? 0 : 1);
+    const level = query.level ?? null;
+    const ranked = [...list].sort(
+      (a, b) =>
+        inAdventure(a) - inAdventure(b) ||
+        (level === null ? 0 : Math.abs((a[4] ?? 99) - level) - Math.abs((b[4] ?? 99) - level)) ||
+        PREGEN_PACKS.indexOf(this.packs[a[2]]!.name) - PREGEN_PACKS.indexOf(this.packs[b[2]]!.name) ||
+        a[1].localeCompare(b[1]),
+    );
+    const e = ranked[0]!;
+    const hit = this.best(e[0], (x) => x[1] === e[1], {})!;
+    return { ...hit, candidates: list.length, fromAdventure: inAdventure(e) === 0 };
   }
 
   findHazard(name: string, query: CreatureQuery = {}): CompendiumMatch | null {
