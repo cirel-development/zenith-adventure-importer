@@ -1,5 +1,5 @@
 {
-  "source": {"system":"pf2e","version":"8.7.1","release":"https://github.com/foundryvtt/pf2e/releases/tag/pf2e-8.7.1","foundry":{"minimum":"14.361","verified":"14.370","maximum":"14"}},
+  "source": {"system":"pf2e","version":"8.7.2","release":"https://github.com/foundryvtt/pf2e/releases/tag/pf2e-8.7.2","foundry":{"minimum":"14.371","verified":"14.371","maximum":"14"}},
   "entryFields": ["name","id","pack","type","level","rarity"],
   "packs": [
     {"name":"abomination-vaults-bestiary","label":"Abomination Vaults","docType":"Actor","folder":"abomination-vaults-bestiary","count":112,"tier":4},
@@ -16,7 +16,7 @@
     {"name":"crown-of-the-kobold-king-bestiary","label":"Crown of the Kobold King","docType":"Actor","folder":"crown-of-the-kobold-king-bestiary","count":42,"tier":4},
     {"name":"curtain-call-bestiary","label":"Curtain Call","docType":"Actor","folder":"curtain-call-bestiary","count":74,"tier":4},
     {"name":"dawn-of-the-frogs","label":"Pathfinder Game Night","docType":"Actor","folder":"standalone-adventures","count":18,"tier":4},
-    {"name":"equipment-srd","label":"Equipment","docType":"Item","folder":"equipment","count":6004,"tier":1},
+    {"name":"equipment-srd","label":"Equipment","docType":"Item","folder":"equipment","count":6005,"tier":1},
     {"name":"extinction-curse-bestiary","label":"Extinction Curse","docType":"Actor","folder":"extinction-curse-bestiary","count":162,"tier":4},
     {"name":"fall-of-plaguestone-bestiary","label":"Fall of Plaguestone","docType":"Actor","folder":"fall-of-plaguestone","count":24,"tier":4},
     {"name":"feats-srd","label":"Feats","docType":"Item","folder":"feats","count":6486,"tier":1},
@@ -5407,6 +5407,7 @@
     ["Rounds (Shield Pistol)","xwHTZGzD8HQrVSal",14,"ammo",0,"uncommon"],
     ["Rounds (Shobhad Longrifle)","lLR2wkdzr0iJ6o5y",14,"ammo",0,"common"],
     ["Rounds (Slide Pistol)","L2df9pyWLFNgjfNh",14,"ammo",0,"common"],
+    ["Rounds (Spider Gun)","2ACUM2SMtEgRTOFw",14,"ammo",0,"common"],
     ["Rounds (Spike Launcher)","useyu9PIrr7QXUUh",14,"ammo",0,"common"],
     ["Rounds (Three-peaked Tree)","11b6MN3UQ8XKqAer",14,"ammo",0,"common"],
     ["Rovagug's Mud","pXV4ov0DJHzIHSEW",14,"consumable",13,"common"],
@@ -6667,7 +6668,7 @@
     ["Tteokguk of Time Advancement","hHsU2sRW47Rge8fU",14,"consumable",5,"common"],
     ["Tubeworm Gland","aFi3p8CEYEM8ZNTT",14,"equipment",7,"common"],
     ["Tulgey Wood Breastplate","2Y4i0LVikmbifeQ9",14,"armor",6,"uncommon"],
-    ["Tulgey Wood Breastplate (Greater)","43sDl6XJgbvQZg9G",14,"armor",6,"uncommon"],
+    ["Tulgey Wood Breastplate (Greater)","43sDl6XJgbvQZg9G",14,"armor",12,"uncommon"],
     ["Tumbler's Belt","i8VDsM0MRVpqC8zu",14,"equipment",13,"unique"],
     ["Turnabout Shield","uVmE0wsLw9tMv7hB",14,"shield",9,"common"],
     ["Turquoise","8aPckmJTsyUfBndP",14,"treasure",0,"common"],

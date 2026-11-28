@@ -17,7 +17,7 @@ const check = (name: string, actual: unknown, expected: unknown) => {
 };
 
 const idx = CompendiumIndex.load();
-check('index version pinned', idx.version, '8.7.1');
+check('index version pinned', idx.version, '8.7.2');
 check('index has entries', idx.size > 20000, true);
 
 check('normalize', normalizeName("The Alchemist’s Fire (Moderate)"), 'alchemists fire moderate');

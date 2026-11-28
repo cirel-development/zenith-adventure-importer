@@ -21,7 +21,7 @@ const args = process.argv.slice(2);
 const textPath = args[args.indexOf('--text') + 1]!;
 const packs = args.flatMap((a, i) => (a === '--pack' ? [args[i + 1]!] : []));
 const verbose = args.includes('--verbose');
-const version = args.includes('--version') ? args[args.indexOf('--version') + 1]! : '8.7.1';
+const version = args.includes('--version') ? args[args.indexOf('--version') + 1]! : '8.7.2';
 
 const zip = unzipSync(readFileSync(join(HERE, '..', '.cache', `pf2e-${version}`, 'json-assets.zip')), {
   filter: (f) => packs.some((p) => f.name === `packs/${p}.json`),

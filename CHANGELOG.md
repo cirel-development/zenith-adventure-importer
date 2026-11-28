@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.2.3
+
+Same requirements: Foundry VTT v14 (verified 14.371) and the PF2e system 8.7.x (now tested on 8.7.2).
+Bundles made for earlier versions still import.
+
+### Fixes
+- **Scene walls, lights, sounds and map pins land where they belong.** Foundry rounds a scene's
+  padding up to whole grid squares, and the importer didn't, so on scenes whose padding wasn't a
+  whole number of squares everything sat up to one square off the map. Scenes imported with
+  earlier versions keep their old positions; re-import to fix them.
+
+### Maps become scenes
+- The adventure's battle maps are found in the PDF (images with a printed grid) and become scenes:
+  cropped to the grid, sized to Foundry's grid, with walls, doors, secret doors, windows and light
+  sources traced from the map. Pages that hold several maps are split into one scene each, named
+  after the adventure's locations and filed under their chapter.
+- Printed area codes on a map (A1, B2...) become map pins that open that location's journal page.
+- Traced walls are moved onto the drawn wall lines. Every scene is flagged for a quick check
+  before play.
+
+### Creature abilities
+- Standard abilities (Grab, Knockdown, Push, Trample, Reactive Strike, Form Up, Change Shape,
+  Engulf...) are PF2e's own glossary abilities with their rules, so PF2e's automation works on
+  them. Regeneration and Fast Healing printed next to HP become actions with their numbers and
+  what deactivates them; Tremorsense and Telepathy come along as well.
+
 ## v0.2.2
 
 Same requirements: Foundry VTT v14 (verified 14.371) and the PF2e system 8.7.x. Bundles made for

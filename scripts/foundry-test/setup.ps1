@@ -34,7 +34,7 @@ param(
   [string]$FoundryZip,
   [string]$InstalledApp = 'C:\Program Files\Foundry Virtual Tabletop\resources\app',
   [string]$Root = (Join-Path $env:USERPROFILE 'FoundryTest'),
-  [string]$Pf2eVersion = '8.7.1',
+  [string]$Pf2eVersion = '8.7.2',
   [string]$QuenchVersion = '0.10.0',
   [int]$Port = 30001,
   [switch]$SkipQuench,

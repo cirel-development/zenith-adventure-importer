@@ -91,7 +91,7 @@ if (!result.valid) console.error(JSON.stringify(result.issues, null, 2));
 const byName = (name: string) => bundle.actors.entities.find((a) => a.name === name)!;
 const vilm = byName('Vilm').stat_block;
 check('Vilm is compendium-ref', vilm.kind, 'compendium-ref');
-check('Vilm version pin', vilm.kind === 'compendium-ref' ? vilm.version_pin : null, 'pf2e@8.7.1');
+check('Vilm version pin', vilm.kind === 'compendium-ref' ? vilm.version_pin : null, 'pf2e@8.7.2');
 check('Vilm notes overlay', vilm.kind === 'compendium-ref' && vilm.notes_html?.includes('Leads the jinkins.'), true);
 check('Stella stays custom', byName('Stella').stat_block.kind, 'custom');
 check('pit is compendium-ref', byName('Hidden Spiked Pit').stat_block.kind, 'compendium-ref');

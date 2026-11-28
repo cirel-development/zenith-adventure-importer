@@ -9,7 +9,7 @@
  *   folder "equipment" -> name "equipment-srd"  -> Compendium.pf2e.equipment-srd.Item.<_id>
  *   folder "fall-of-plaguestone" -> "fall-of-plaguestone-bestiary"
  *
- * Run:  pnpm --filter @ai-adventure/worker build:index [-- --version 8.7.1] [-- --refresh]
+ * Run:  pnpm --filter @ai-adventure/worker build:index [-- --version 8.7.2] [-- --refresh]
  * Output is deterministic for a given PF2e version (sorted, no timestamps).
  */
 import { existsSync } from 'node:fs';
@@ -51,7 +51,7 @@ interface SystemPack {
 }
 
 async function main(): Promise<void> {
-  const version = arg('version') ?? '8.7.1';
+  const version = arg('version') ?? '8.7.2';
   const refresh = process.argv.includes('--refresh');
   const tag = `pf2e-${version}`;
   const base = `https://github.com/foundryvtt/pf2e/releases/download/${tag}`;
